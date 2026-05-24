@@ -1395,10 +1395,15 @@ async function openCourseContentModal(courseId) {
 }
 
 function openModuleModal() {
-    document.getElementById('moduleModalTitle').textContent = '🧩 Thêm chương mới';
-    document.getElementById('moduleModalId').value = '';
-    document.getElementById('moduleModalTitleInput').value = '';
-    document.getElementById('moduleModalLevelInput').value = '1';
+    const titleEl = document.getElementById('moduleModalTitle');
+    const idEl = document.getElementById('moduleModalId');
+    const titleInput = document.getElementById('moduleTitleInput') || document.getElementById('moduleModalTitleInput');
+    const levelInput = document.getElementById('moduleLevelInput') || document.getElementById('moduleModalLevelInput');
+
+    if (titleEl) titleEl.textContent = '🧩 Thêm chương mới';
+    if (idEl) idEl.value = '';
+    if (titleInput) titleInput.value = '';
+    if (levelInput) levelInput.value = '1';
     openModal('moduleModal');
 }
 
@@ -1408,37 +1413,41 @@ async function openEditModuleModal(id) {
         let m = modules.find(x => x.moduleId == id);
         if (!m) {
             // Try fetching from course content if not in library
-            if (currentCourseContentParams.modules) {
+            if (currentCourseContentParams && currentCourseContentParams.modules) {
                 m = currentCourseContentParams.modules.find(x => x.moduleId == id);
             }
         }
         if (!m) return showToast('Không tìm thấy chương!', 'error');
 
-        document.getElementById('moduleModalTitle').textContent = '📝 Sửa chương';
-        document.getElementById('moduleModalId').value = id;
-        document.getElementById('moduleModalTitleInput').value = m.title || '';
-        document.getElementById('moduleModalLevelInput').value = m.level || '1';
-        openModal('moduleModal');
+        const editModuleIdEl = document.getElementById('editModuleId');
+        const editModuleTitleInputEl = document.getElementById('editModuleTitleInput');
+        const editModuleLevelInputEl = document.getElementById('editModuleLevelInput');
+
+        if (editModuleIdEl) editModuleIdEl.value = id;
+        if (editModuleTitleInputEl) editModuleTitleInputEl.value = m.title || '';
+        if (editModuleLevelInputEl) editModuleLevelInputEl.value = m.level || '1';
+
+        openModal('editModuleModal');
     } catch(e) {
         showToast(e.message, 'error');
     }
 }
 
 async function submitModule() {
-    const id = document.getElementById('moduleModalId').value;
-    const body = {
-        title: document.getElementById('moduleModalTitleInput').value,
-        level: parseInt(document.getElementById('moduleModalLevelInput').value) || 1
-    };
-    if (!body.title) return showToast('Nhập tiêu đề chương!', 'error');
+    const idEl = document.getElementById('moduleModalId');
+    const id = idEl ? idEl.value : '';
+    const title = (document.getElementById('moduleTitleInput') || document.getElementById('moduleModalTitleInput'))?.value || '';
+    const level = parseInt((document.getElementById('moduleLevelInput') || document.getElementById('moduleModalLevelInput'))?.value) || 1;
+    
+    if (!title) return showToast('Nhập tiêu đề chương!', 'error');
 
     try {
         if (id) {
-            await apiFetch(`/api/it/modules/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+            await apiFetch(`/api/it/modules/${id}`, { method: 'PUT', body: JSON.stringify({ title, level }) });
             showToast('Cập nhật chương thành công!');
         } else {
             const courseId = currentContentCourseId || 0;
-            await apiFetch(`/api/it/courses/${courseId}/modules`, { method: 'POST', body: JSON.stringify(body) });
+            await apiFetch(`/api/it/courses/${courseId}/modules`, { method: 'POST', body: JSON.stringify({ title, level }) });
             showToast('Thêm chương thành công!');
         }
         closeModal('moduleModal');
