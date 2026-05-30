@@ -43,10 +43,16 @@ public class AuthController : Controller
         password = password.Trim();
 
         // 2. Tìm User trong DB (bao gồm cả Roles và Department để check quyền sau này)
+        var searchUsername = username;
+        if (searchUsername.Contains("@"))
+        {
+            searchUsername = searchUsername.Split('@')[0];
+        }
+
         var user = await _db.Users
             .Include(u => u.Roles)
             .Include(u => u.Department)
-            .FirstOrDefaultAsync(u => u.Username == username && u.Status == "Active");
+            .FirstOrDefaultAsync(u => (u.Username == searchUsername || u.Email == username) && u.Status == "Active");
 
         if (user == null)
         {
@@ -192,9 +198,9 @@ public class AuthController : Controller
 
         // Kiểm tra các Role từ bảng trung gian
         var roleNames = user.Roles.Select(r => r.RoleName?.ToUpper()).ToList();
-        var managerRoles = new[] { "HR", "TRAINING MANAGER", "HR MANAGER", "MANAGER", "DEPT ADMIN" };
+        var managerRoles = new[] { "HR", "TRAINING MANAGER", "HR MANAGER", "MANAGER", "DEPT ADMIN", "TRAINER", "LECTURER", "GIẢNG VIÊN" };
         
-        if (managerRoles.Any(mr => roleNames.Contains(mr)))
+        if (managerRoles.Any(mr => roleNames.Contains(mr)) || user.IsDeptAdmin == true)
             return "Manager";
 
         return "Student";

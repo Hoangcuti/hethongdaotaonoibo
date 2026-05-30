@@ -45,7 +45,6 @@ public class StudentController : Controller
                 c.IsForAllDepartments == true ||
                 (departmentId.HasValue && departmentId > 0 && (
                     c.TargetDepartmentId == departmentId ||
-                    c.OwnerDepartmentId == departmentId ||
                     (c.TargetDepartmentIds != null && EF.Functions.Like("," + c.TargetDepartmentIds + ",", "%," + departmentId.Value + ",%"))
                 ))
             )
@@ -324,6 +323,65 @@ public class StudentController : Controller
             .FirstOrDefaultAsync(e => e.ExamId == examId && e.CourseId == courseId);
         if (exam == null) return NotFound();
 
+        // Check attempts limit
+        var attemptsCount = await _db.UserExams.CountAsync(ue => ue.UserId == userId && ue.ExamId == examId && ue.IsFinish == true);
+        var activeSession = await _db.UserExams.AnyAsync(ue => ue.UserId == userId && ue.ExamId == examId && ue.IsFinish != true);
+        if (exam.MaxAttempts.HasValue && attemptsCount >= exam.MaxAttempts.Value && !activeSession)
+        {
+            return RedirectToAction("Learn", "Student", new { courseId });
+        }
+
+        // Check sequential chapter locks
+        if (exam.ModuleId.HasValue)
+        {
+            var modulesList = await _db.CourseModules
+                .Where(m => m.CourseId == courseId)
+                .OrderBy(m => m.SortOrder)
+                .ToListAsync();
+            
+            var currentMod = modulesList.FirstOrDefault(m => m.ModuleId == exam.ModuleId.Value);
+            if (currentMod != null)
+            {
+                var courseExams = await _db.Exams
+                    .Where(e => e.CourseId == courseId)
+                    .ToListAsync();
+
+                var courseExamIds = courseExams.Select(ce => ce.ExamId).ToList();
+
+                var userExams = await _db.UserExams
+                    .Where(ue => ue.UserId == userId && ue.IsFinish == true && ue.ExamId.HasValue && courseExamIds.Contains(ue.ExamId.Value))
+                    .ToListAsync();
+
+                bool isLocked = false;
+                var currentIndex = modulesList.IndexOf(currentMod);
+                for (int j = 0; j < currentIndex; j++)
+                {
+                    var prevMod = modulesList[j];
+                    var prevModExam = courseExams.FirstOrDefault(e => e.ModuleId == prevMod.ModuleId);
+                    if (prevModExam != null)
+                    {
+                        var bestScore = userExams
+                            .Where(ue => ue.ExamId == prevModExam.ExamId)
+                            .Select(ue => ue.Score ?? 0)
+                            .DefaultIfEmpty(0m)
+                            .Max();
+                        
+                        var passScore = prevModExam.PassScore ?? 50m;
+                        if (bestScore < passScore)
+                        {
+                            isLocked = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (isLocked)
+                {
+                    return RedirectToAction("Learn", "Student", new { courseId });
+                }
+            }
+        }
+
         ViewBag.CourseId = courseId;
         ViewBag.CourseTitle = exam.Course?.Title;
         ViewBag.ExamId = examId;
@@ -373,18 +431,63 @@ public class StudentController : Controller
             .Select(l => l.LessonId)
             .ToListAsync();
 
-        var modulesQuery = _db.CourseModules
+        var modulesList = await _db.CourseModules
             .Include(m => m.Lessons)
-            .Where(m => m.CourseId == courseId);
-        // NOTE: Không lọc theo departmentId ở đây — học viên đã enroll
-        // được xem toàn bộ nội dung khóa học bất kể TargetDepartmentId của module.
-
-        var modules = await modulesQuery
+            .Where(m => m.CourseId == courseId)
             .OrderBy(m => m.SortOrder)
-            .Select(m => new
+            .ToListAsync();
+
+        var courseExams = await _db.Exams
+            .Where(e => e.CourseId == courseId)
+            .ToListAsync();
+
+        var courseExamIds = courseExams.Select(ce => ce.ExamId).ToList();
+
+        var userExams = await _db.UserExams
+            .Where(ue => ue.UserId == userId && ue.IsFinish == true && ue.ExamId.HasValue && courseExamIds.Contains(ue.ExamId.Value))
+            .ToListAsync();
+
+        // Calculate locks
+        var moduleLocks = new Dictionary<int, (bool IsLocked, string Reason)>();
+        for (int i = 0; i < modulesList.Count; i++)
+        {
+            var currentMod = modulesList[i];
+            bool isLocked = false;
+            string lockReason = "";
+
+            // Check previous modules
+            for (int j = 0; j < i; j++)
+            {
+                var prevMod = modulesList[j];
+                var prevModExam = courseExams.FirstOrDefault(e => e.ModuleId == prevMod.ModuleId);
+                if (prevModExam != null)
+                {
+                    var bestScore = userExams
+                        .Where(ue => ue.ExamId == prevModExam.ExamId)
+                        .Select(ue => ue.Score ?? 0)
+                        .DefaultIfEmpty(0m)
+                        .Max();
+
+                    var passScore = prevModExam.PassScore ?? 50m;
+                    if (bestScore < passScore)
+                    {
+                        isLocked = true;
+                        lockReason = $"Cần hoàn thành bài thi '{prevModExam.ExamTitle}' của chương trước đạt {passScore}%";
+                        break;
+                    }
+                }
+            }
+            moduleLocks[currentMod.ModuleId] = (isLocked, lockReason);
+        }
+
+        var modules = modulesList.Select(m => {
+            var lockInfo = moduleLocks.TryGetValue(m.ModuleId, out var val) ? val : (false, "");
+            return new
             {
                 moduleId = m.ModuleId,
                 title = m.Title,
+                isLocked = lockInfo.Item1,
+                lockReason = lockInfo.Item2,
                 lessons = m.Lessons.OrderBy(l => l.SortOrder).Select(l => new
                 {
                     lessonId = l.LessonId,
@@ -392,10 +495,12 @@ public class StudentController : Controller
                     videoUrl = l.VideoUrl,
                     contentBody = l.ContentBody,
                     contentType = l.ContentType,
-                    isCompleted = completedLessonIds.Contains((int)l.LessonId)
+                    isCompleted = completedLessonIds.Contains((int)l.LessonId),
+                    isLocked = lockInfo.Item1,
+                    lockReason = lockInfo.Item2
                 }).ToList()
-            })
-            .ToListAsync();
+            };
+        }).ToList();
 
         var exams = await _db.Exams
             .Where(e => e.CourseId == courseId)
@@ -403,6 +508,7 @@ public class StudentController : Controller
             .Select(e => new
             {
                 examId = e.ExamId,
+                moduleId = e.ModuleId,
                 title = e.ExamTitle,
                 durationMinutes = e.DurationMinutes ?? 30,
                 passScore = e.PassScore ?? 50,
@@ -426,18 +532,36 @@ public class StudentController : Controller
             .ToListAsync();
 
         // Cấu trúc lại để thêm isLocked và lockReason
-        var mappedExams = exams.Select(e => new {
-            e.examId,
-            e.title,
-            e.durationMinutes,
-            e.passScore,
-            e.questionCount,
-            e.maxAttempts,
-            e.endDate,
-            e.attemptsCount,
-            e.lastAttempt,
-            isLocked = (e.maxAttempts != null && e.attemptsCount >= e.maxAttempts) || (e.endDate != null && DateTime.Now > e.endDate),
-            lockReason = (e.endDate != null && DateTime.Now > e.endDate) ? "Đã hết hạn làm bài" : (e.maxAttempts != null && e.attemptsCount >= e.maxAttempts) ? "Đã hết số lần làm bài tối đa" : ""
+        var mappedExams = exams.Select(e => {
+            var dbExam = courseExams.FirstOrDefault(ce => ce.ExamId == e.examId);
+            var isModuleLocked = false;
+            var moduleLockReason = "";
+            if (dbExam?.ModuleId != null && moduleLocks.TryGetValue(dbExam.ModuleId.Value, out var mLock))
+            {
+                isModuleLocked = mLock.IsLocked;
+                moduleLockReason = mLock.Reason;
+            }
+
+            var isLocked = isModuleLocked || (e.maxAttempts != null && e.attemptsCount >= e.maxAttempts) || (e.endDate != null && DateTime.Now > e.endDate);
+            var lockReason = "";
+            if (isModuleLocked) lockReason = moduleLockReason;
+            else if (e.endDate != null && DateTime.Now > e.endDate) lockReason = "Đã hết hạn làm bài";
+            else if (e.maxAttempts != null && e.attemptsCount >= e.maxAttempts) lockReason = "Đã hết số lần làm bài tối đa";
+
+            return new {
+                e.examId,
+                e.moduleId,
+                e.title,
+                e.durationMinutes,
+                e.passScore,
+                e.questionCount,
+                e.maxAttempts,
+                e.endDate,
+                e.attemptsCount,
+                e.lastAttempt,
+                isLocked,
+                lockReason
+            };
         }).ToList();
 
         // Tính điểm trung bình Quiz chính xác (tính cả những bài chưa làm là 0đ)
@@ -574,6 +698,69 @@ public class StudentController : Controller
 
             var isEnrolled = await _db.Enrollments.AnyAsync(e => e.UserId == userId && e.CourseId == exam.CourseId);
             if (!isEnrolled) return Forbid();
+
+            // Check max attempts
+            var attemptsCount = await _db.UserExams.CountAsync(ue => ue.UserId == userId && ue.ExamId == examId && ue.IsFinish == true);
+            var activeSession = await _db.UserExams.AnyAsync(ue => ue.UserId == userId && ue.ExamId == examId && ue.IsFinish != true);
+            if (exam.MaxAttempts.HasValue && attemptsCount >= exam.MaxAttempts.Value && !activeSession)
+            {
+                return BadRequest(new { error = "Bạn đã hết số lần làm bài kiểm tra này." });
+            }
+
+            // Check if the exam's module is locked
+            if (exam.ModuleId.HasValue)
+            {
+                var courseId = exam.CourseId.Value;
+                var modulesList = await _db.CourseModules
+                    .Where(m => m.CourseId == courseId)
+                    .OrderBy(m => m.SortOrder)
+                    .ToListAsync();
+                
+                var currentMod = modulesList.FirstOrDefault(m => m.ModuleId == exam.ModuleId.Value);
+                if (currentMod != null)
+                {
+                    var courseExams = await _db.Exams
+                        .Where(e => e.CourseId == courseId)
+                        .ToListAsync();
+
+                    var courseExamIds = courseExams.Select(ce => ce.ExamId).ToList();
+
+                    var userExams = await _db.UserExams
+                        .Where(ue => ue.UserId == userId && ue.IsFinish == true && ue.ExamId.HasValue && courseExamIds.Contains(ue.ExamId.Value))
+                        .ToListAsync();
+
+                    bool isLocked = false;
+                    string lockReason = "";
+                    
+                    var currentIndex = modulesList.IndexOf(currentMod);
+                    for (int j = 0; j < currentIndex; j++)
+                    {
+                        var prevMod = modulesList[j];
+                        var prevModExam = courseExams.FirstOrDefault(e => e.ModuleId == prevMod.ModuleId);
+                        if (prevModExam != null)
+                        {
+                            var bestScore = userExams
+                                .Where(ue => ue.ExamId == prevModExam.ExamId)
+                                .Select(ue => ue.Score ?? 0)
+                                .DefaultIfEmpty(0m)
+                                .Max();
+                            
+                            var passScore = prevModExam.PassScore ?? 50m;
+                            if (bestScore < passScore)
+                            {
+                                isLocked = true;
+                                lockReason = $"Cần hoàn thành bài thi '{prevModExam.ExamTitle}' của chương trước đạt {passScore}%";
+                                break;
+                            }
+                        }
+                    }
+
+                    if (isLocked)
+                    {
+                        return BadRequest(new { error = lockReason });
+                    }
+                }
+            }
 
             var session = await GetOrCreateQuizSessionAsync(userId.Value, exam);
             var answers = await _db.UserAnswers.Where(a => a.UserExamId == session.UserExam.UserExamId).ToListAsync();
@@ -948,7 +1135,10 @@ public class StudentController : Controller
         if (user == null) return NotFound();
 
         if (!string.IsNullOrWhiteSpace(dto.FullName)) user.FullName = dto.FullName;
-        if (!string.IsNullOrWhiteSpace(dto.Email)) user.Email = dto.Email;
+        if (!string.IsNullOrWhiteSpace(dto.Email))
+        {
+            user.Email = dto.Email.Split('@')[0].Trim().ToLower() + "@basau.net";
+        }
 
         await _db.SaveChangesAsync();
         return Ok(new { success = true });
@@ -1479,9 +1669,10 @@ public class StudentController : Controller
             
         var completedExams = await _db.UserExams
             .Where(ue => ue.UserId == userId && ue.IsFinish == true &&
-                        _db.Exams.Any(e => e.ExamId == ue.ExamId && e.CourseId == courseId && 
-                                          ue.Score >= (e.PassScore ?? 50)))
-            .GroupBy(ue => ue.ExamId) // Đảm bảo mỗi bài thi chỉ tính 1 lần hoàn thành
+                         _db.Exams.Any(e => e.ExamId == ue.ExamId && e.CourseId == courseId && 
+                                           ue.Score >= (e.PassScore ?? 50)))
+            .Select(ue => ue.ExamId)
+            .Distinct()
             .CountAsync();
 
         var completedItems = completedLessons + completedExams;

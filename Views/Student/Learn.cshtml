@@ -511,35 +511,62 @@ function getLessonProgressPct(l) {
     return Math.round(lessonProgress[l.lessonId] || 0);
 }
 
+function escapeJs(str) {
+    return (str || '').replace(/'/g, "\\'");
+}
+
 function renderSidebar() {
     const list = document.getElementById('sideList');
     if (currentTab === 'lessons') {
-        list.innerHTML = curriculum.modules.map((m, i) =>
-            `<div class="group">
+        list.innerHTML = curriculum.modules.map((m, i) => {
+            const moduleExams = (curriculum.exams || []).filter(e => e.moduleId === m.moduleId);
+            const lessonsHtml = m.lessons.map(l => {
+                const pct = getLessonProgressPct(l);
+                const isActive = currentLessonId === l.lessonId;
+                const isVideo = l.contentType === 'Video';
+                const barColor = l.isCompleted ? 'var(--success)' : (pct > 0 ? '#f59e0b' : 'rgba(255,255,255,0.1)');
+                const badgeStyle = l.isCompleted ? 'background:var(--success);color:#fff' : (pct > 0 ? 'background:#f59e0b;color:#fff' : '');
+                const badgeText = l.isCompleted ? '✓ Xong' : (pct > 0 ? `${pct}%` : 'Học');
+                const clickAction = m.isLocked ? `showToast('${escapeJs(m.lockReason)}', 'warning')` : `playLesson(${l.lessonId})`;
+                
+                return `<div class="item ${isActive ? 'active' : ''}" style="${m.isLocked ? 'opacity: 0.55; cursor: not-allowed;' : ''}" onclick="${clickAction}">
+                    <div class="item-title">${m.isLocked ? '🔒 ' : ''}${escapeHtml(l.title || 'Bài học')}</div>
+                    <div class="item-meta">
+                        <span>${escapeHtml(l.contentType || 'Nội dung')}</span>
+                        ${!m.isLocked ? `<span class="status-badge" style="${badgeStyle}">${badgeText}</span>` : ''}
+                    </div>
+                    ${isVideo && !m.isLocked ? `<div style="margin-top:8px;height:4px;background:rgba(255,255,255,0.08);border-radius:99px;overflow:hidden">
+                        <div style="height:100%;width:${pct}%;background:${barColor};border-radius:99px;transition:width 0.5s ease"></div>
+                    </div>` : ''}
+                </div>`;
+            }).join('');
+
+            const examsHtml = moduleExams.map((e, idx) => {
+                const isDone = e.lastAttempt && e.lastAttempt.isFinish;
+                const score = isDone ? e.lastAttempt.score : 0;
+                const isPerfect = score >= 100;
+                const lockHtml = e.isLocked ? `<div style="position:absolute; inset:0; background:rgba(255,255,255,0.65); backdrop-filter:blur(2px); z-index:2; cursor:not-allowed; display:flex; align-items:center; justify-content:center; color:#1e293b; font-size:10px; font-weight:800;" title="${escapeHtml(e.lockReason)}">🔒 ${escapeHtml(e.lockReason)}</div>` : '';
+                const clickAction = e.isLocked ? `showToast('${escapeJs(e.lockReason)}', 'warning')` : `openExam(${e.examId})`;
+                
+                return `<div class="item" style="position:relative; background: rgba(99,102,241,0.03); border-left: 3px solid var(--brand); ${e.isLocked ? 'opacity: 0.7;' : ''}" onclick="${clickAction}">
+                    <div class="item-title" style="font-weight:700; ${isPerfect ? 'color:var(--success)' : ''}">📝 Thi: ${escapeHtml(e.title || 'Bài kiểm tra')}</div>
+                    <div class="item-meta">
+                        <span>${e.questionCount} câu | ${e.durationMinutes} phút</span>
+                        <span class="status-badge" style="${isPerfect ? 'background:var(--success); color:white; border:none' : (e.isLocked ? 'background:#f1f5f9; color:#94a3b8' : '')}">${isDone ? `${score}%` : (e.isLocked ? 'Khóa' : 'Thi')}</span>
+                    </div>
+                    ${lockHtml}
+                </div>`;
+            }).join('');
+
+            return `<div class="group">
                 <div class="group-title" style="display:flex; justify-content:space-between; align-items:center;">
                     <span>Chương ${i + 1}: ${escapeHtml(m.title || '')}</span>
-                    <button class="ai-summary-btn" onclick="showModuleSummary(${m.moduleId}, '${escapeHtml(m.title || '')}')" title="Tóm tắt bằng AI">✨ AI</button>
-                </div>${
-                m.lessons.map(l => {
-                    const pct = getLessonProgressPct(l);
-                    const isActive = currentLessonId === l.lessonId;
-                    const isVideo = l.contentType === 'Video';
-                    const barColor = l.isCompleted ? 'var(--success)' : (pct > 0 ? '#f59e0b' : 'rgba(255,255,255,0.1)');
-                    const badgeStyle = l.isCompleted ? 'background:var(--success);color:#fff' : (pct > 0 ? 'background:#f59e0b;color:#fff' : '');
-                    const badgeText = l.isCompleted ? '✓ Xong' : (pct > 0 ? `${pct}%` : 'Học');
-                    return `<div class="item ${isActive ? 'active' : ''}" onclick="playLesson(${l.lessonId})">
-                        <div class="item-title">${escapeHtml(l.title || 'Bài học')}</div>
-                        <div class="item-meta">
-                            <span>${escapeHtml(l.contentType || 'Nội dung')}</span>
-                            <span class="status-badge" style="${badgeStyle}">${badgeText}</span>
-                        </div>
-                        ${isVideo ? `<div style="margin-top:8px;height:4px;background:rgba(255,255,255,0.08);border-radius:99px;overflow:hidden">
-                            <div style="height:100%;width:${pct}%;background:${barColor};border-radius:99px;transition:width 0.5s ease"></div>
-                        </div>` : ''}
-                    </div>`;
-                }).join('')
-            }</div>`
-        ).join('') || '<div class="muted">Chưa có bài học.</div>';
+                    ${!m.isLocked ? `<button class="ai-summary-btn" onclick="showModuleSummary(${m.moduleId}, '${escapeHtml(m.title || '')}')" title="Tóm tắt bằng AI">✨ AI</button>` : ''}
+                </div>
+                ${lessonsHtml}
+                ${examsHtml}
+            </div>`;
+        }).join('') || '<div class="muted">Chưa có bài học.</div>';
     } else {
         list.innerHTML = (curriculum.exams || []).map((e, idx) => {
             const isDone = e.lastAttempt && e.lastAttempt.isFinish;
@@ -547,7 +574,7 @@ function renderSidebar() {
             const isPerfect = score >= 100;
             const lockHtml = e.isLocked ? `<div style="position:absolute; inset:0; background:rgba(255,255,255,0.6); backdrop-filter:blur(3px); z-index:2; cursor:not-allowed; display:flex; align-items:center; justify-content:center; color:#1e293b; font-size:10px; font-weight:800;" title="${e.lockReason}">🔒 ${e.lockReason}</div>` : '';
             
-            return `<div class="item" style="position:relative;" onclick="${e.isLocked ? `showToast('${e.lockReason}', 'warning')` : `openExam(${e.examId})`}">
+            return `<div class="item" style="position:relative;" onclick="${e.isLocked ? `showToast('${escapeJs(e.lockReason)}', 'warning')` : `openExam(${e.examId})`}">
                 <div class="item-title" style="${isPerfect ? 'color:var(--success)' : ''}">Quiz ${idx + 1}: ${escapeHtml(e.title || 'Bài kiểm tra')}</div>
                 <div class="item-meta"><span>${e.questionCount} câu | ${e.durationMinutes} phút</span>
                 <span class="status-badge" style="${isPerfect ? 'background:var(--success); color:white; border:none' : (e.isLocked ? 'background:#f1f5f9; color:#94a3b8' : '')}">${isDone ? `${score}%` : (e.isLocked ? 'Khóa' : 'Thi')}</span></div>
@@ -669,6 +696,9 @@ function playLesson(id) {
             }
             
             host.innerHTML = `<div id="ytPlayerHost" style="border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.3)"></div>`;
+            if (lesson.contentBody && lesson.contentBody.trim() !== '') {
+                host.innerHTML += `<div class="doc" style="margin-top:24px; border-top:1px solid var(--line); padding-top:24px;">${lesson.contentBody}</div>`;
+            }
             videoTracker.ytPlayer = new YT.Player('ytPlayerHost', {
                 height: '480',
                 width: '100%',
@@ -706,6 +736,9 @@ function playLesson(id) {
             host.innerHTML = `<video id="nativeVideo" controls style="width:100%; height:auto; max-height:480px; background:#000; border-radius:12px;">
                                 <source src="${lesson.videoUrl}" type="video/mp4">
                               </video>`;
+            if (lesson.contentBody && lesson.contentBody.trim() !== '') {
+                host.innerHTML += `<div class="doc" style="margin-top:24px; border-top:1px solid var(--line); padding-top:24px;">${lesson.contentBody}</div>`;
+            }
             const video = document.getElementById('nativeVideo');
             
             video.oncanplay = () => {
@@ -777,7 +810,8 @@ function playLesson(id) {
     }
     
     const badge = document.getElementById('contentBadge');
-    if (lesson.videoUrl) badge.textContent = 'Video';
+    if (lesson.videoUrl && lesson.contentBody && lesson.contentBody.trim() !== '') badge.textContent = 'Video & Lý thuyết';
+    else if (lesson.videoUrl) badge.textContent = 'Video';
     else if (lesson.contentBody) badge.textContent = 'Văn bản';
     else badge.textContent = 'Tài liệu';
     

@@ -978,7 +978,58 @@ async function loadOverview() {
     }
 }
 
+let currentUsersPage = 1;
+
+function renderUsersPagination(total, currentPage, pageSize) {
+    const paginationEl = document.getElementById('usersPagination');
+    if (!paginationEl) return;
+    
+    const totalPages = Math.ceil(total / pageSize);
+    if (totalPages <= 1) {
+        paginationEl.innerHTML = '';
+        return;
+    }
+    
+    let html = '';
+    
+    // Nút Previous
+    html += `<button class="page-btn" ${currentPage === 1 ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''} onclick="loadUsers(${currentPage - 1})">◀</button>`;
+    
+    // Các trang số
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    
+    if (endPage - startPage < maxVisiblePages - 1) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    
+    if (startPage > 1) {
+        html += `<button class="page-btn" onclick="loadUsers(1)">1</button>`;
+        if (startPage > 2) {
+            html += `<span class="pagination-ellipsis" style="padding: 10px 6px; color: var(--color-text-muted);">...</span>`;
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="loadUsers(${i})">${i}</button>`;
+    }
+    
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            html += `<span class="pagination-ellipsis" style="padding: 10px 6px; color: var(--color-text-muted);">...</span>`;
+        }
+        html += `<button class="page-btn" onclick="loadUsers(${totalPages})">${totalPages}</button>`;
+    }
+    
+    // Nút Next
+    html += `<button class="page-btn" ${currentPage === totalPages ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''} onclick="loadUsers(${currentPage + 1})">▶</button>`;
+    
+    paginationEl.innerHTML = html;
+}
+
 async function loadUsers(page = 1) {
+    currentUsersPage = page;
     const search = document.getElementById('userSearch')?.value || '';
     try {
         const data = await apiFetch(`/api/it/users?search=${encodeURIComponent(search)}&page=${page}&pageSize=15`);
@@ -997,6 +1048,11 @@ async function loadUsers(page = 1) {
                 </td>
             </tr>
         `).join('');
+        
+        renderUsersPagination(data.total, page, 15);
+        
+        // Tự động cuộn lên đầu trang
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch(e) {
         if(typeof console !== 'undefined') console.error(e);
         if(typeof showToast === 'function') showToast(e.message || 'Lỗi API Backend: Mã lỗi 500', 'error');
@@ -1032,6 +1088,118 @@ function updateSelectedList() {
 }
 // submitBulkDept combined with submitBulkDeptUpdate/new logic
 
+function removeVietnameseAccents(str) {
+    return str
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'd')
+        .toLowerCase();
+}
+
+function getDeptPrefix(name) {
+    if (!name) return "NV";
+    const lower = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
+    if (lower.includes("giam doc")) return "GD";
+    if (lower.includes("nhan su")) return "HR";
+    if (lower.includes("ky thuat") || lower.includes("san xuat")) return "KT";
+    if (lower.includes("kinh doanh") || lower.includes("marketing")) return "KD";
+    if (lower.includes("tai chinh") || lower.includes("ke toan")) return "TC";
+    if (lower.includes("cong nghe") || lower.includes("thong tin") || lower.includes("it")) return "IT";
+    if (lower.includes("dao tao") || lower.includes("giang vien")) return "GV";
+    return "NV";
+}
+
+function onNewDepartmentChange() {
+    const dEl = document.getElementById('newDepartment');
+    const codeEl = document.getElementById('newEmployeeCode');
+    if (!dEl || !codeEl) return;
+    
+    const deptId = dEl.value;
+    const dept = (window.departments || departments || []).find(d => d.departmentId == deptId);
+    const prefix = getDeptPrefix(dept ? dept.departmentName : '');
+    
+    let currentVal = codeEl.value.trim();
+    if (!currentVal) {
+        codeEl.value = prefix + String(Math.floor(1000 + Math.random() * 9000));
+    } else {
+        const match = currentVal.match(/^([A-Za-z]{2})(.*)$/);
+        if (match) {
+            codeEl.value = prefix + match[2];
+        } else {
+            codeEl.value = prefix + currentVal;
+        }
+    }
+    onNewEmployeeCodeInput();
+}
+
+function generateEmailFromNameAndCode(fullName, empCode) {
+    if (!fullName) return '';
+    const cleanedName = removeVietnameseAccents(fullName).trim();
+    const words = cleanedName.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return '';
+    
+    const givenName = words[words.length - 1]; // e.g. "hieu"
+    const initials = words.slice(0, -1).map(w => w[0]).join(''); // e.g. "dd"
+    
+    const codeLower = (empCode || '').trim().toLowerCase();
+    
+    return `${givenName}${initials}${codeLower}@basau.net`;
+}
+
+function onNewFullNameInput() {
+    const fullNameEl = document.getElementById('newFullName');
+    const employeeCodeEl = document.getElementById('newEmployeeCode');
+    const emailEl = document.getElementById('newEmail');
+    const usernameEl = document.getElementById('newUsername');
+    
+    if (!fullNameEl) return;
+    
+    const fullName = fullNameEl.value.trim();
+    if (!fullName) {
+        if (employeeCodeEl) employeeCodeEl.value = '';
+        if (emailEl) emailEl.value = '';
+        if (usernameEl) usernameEl.value = '';
+        return;
+    }
+    
+    let empCode = employeeCodeEl ? employeeCodeEl.value.trim() : '';
+    if (!empCode) {
+        const dEl = document.getElementById('newDepartment');
+        const deptId = dEl ? dEl.value : '';
+        const dept = (window.departments || departments || []).find(d => d.departmentId == deptId);
+        const prefix = getDeptPrefix(dept ? dept.departmentName : '');
+        empCode = prefix + String(Math.floor(1000 + Math.random() * 9000));
+        if (employeeCodeEl) employeeCodeEl.value = empCode;
+    }
+    
+    const email = generateEmailFromNameAndCode(fullName, empCode);
+    if (emailEl) emailEl.value = email;
+    if (usernameEl) {
+        usernameEl.value = email.split('@')[0];
+    }
+}
+
+function onNewEmployeeCodeInput() {
+    const fullNameEl = document.getElementById('newFullName');
+    const employeeCodeEl = document.getElementById('newEmployeeCode');
+    const emailEl = document.getElementById('newEmail');
+    const usernameEl = document.getElementById('newUsername');
+    
+    if (!fullNameEl || !employeeCodeEl) return;
+    
+    const fullName = fullNameEl.value.trim();
+    const empCode = employeeCodeEl.value.trim();
+    
+    if (fullName && empCode) {
+        const email = generateEmailFromNameAndCode(fullName, empCode);
+        if (emailEl) emailEl.value = email;
+        if (usernameEl) {
+            usernameEl.value = email.split('@')[0];
+        }
+    }
+}
+
 async function submitCreateUser() {
     const uEl = document.getElementById('newUsername');
     const pEl = document.getElementById('newPassword');
@@ -1040,15 +1208,28 @@ async function submitCreateUser() {
     const mEl = document.getElementById('newEmail');
     const dEl = document.getElementById('newDepartment');
 
+    let emailVal = mEl ? mEl.value.trim() : '';
+    if (emailVal) {
+        emailVal = emailVal.split('@')[0] + '@basau.net';
+    }
+    let usernameVal = uEl ? uEl.value.trim() : '';
+    if (usernameVal) {
+        usernameVal = usernameVal.split('@')[0];
+    } else if (emailVal) {
+        usernameVal = emailVal.split('@')[0];
+    }
+
     const body = {
-        username: uEl ? uEl.value : '',
-        password: (pEl ? pEl.value : '') || '123',
-        fullName: fEl ? fEl.value : '',
-        employeeCode: (eEl ? eEl.value : '') || ('NV' + Math.floor(Math.random() * 1000000)),
-        email: (mEl ? mEl.value : '') || (uEl ? uEl.value + '@domain.com' : ''),
+        username: usernameVal,
+        password: (pEl ? pEl.value : '') || '123456',
+        fullName: fEl ? fEl.value.trim() : '',
+        employeeCode: eEl ? eEl.value.trim() : '',
+        email: emailVal,
         departmentId: dEl ? parseInt(dEl.value) || null : null
     };
     if(!body.username) { showToast('Vui lòng nhập tên đăng nhập!', 'error'); return; }
+    if(!body.fullName) { showToast('Vui lòng nhập họ và tên!', 'error'); return; }
+    if(!body.email) { showToast('Vui lòng nhập email!', 'error'); return; }
     
     try {
         await apiFetch('/api/it/users', { method: 'POST', body: JSON.stringify(body) });
@@ -1089,7 +1270,7 @@ async function submitEditUser() {
         await apiFetch(`/api/it/users/${id}`, { method: 'PUT', body: JSON.stringify(body) });
         showToast('Cập nhật thành công!');
         closeModal('editUserModal');
-        loadUsers(1);
+        loadUsers(currentUsersPage);
     } catch(e) {
         showToast(e.message || 'Lỗi cập nhật', 'error');
     }
@@ -1132,7 +1313,7 @@ async function submitUserRoles() {
 
         showToast('Cập nhật role thành công!');
         closeModal('userRoleModal');
-        loadUsers();
+        loadUsers(currentUsersPage);
     } catch(e) {
         showToast(e.message || 'Lỗi cập nhật role', 'error');
     }
@@ -1143,7 +1324,11 @@ async function deleteUser(id, username) {
     try {
         await apiFetch(`/api/it/users/${id}`, { method: 'DELETE' });
         showToast('Đã vô hiệu hóa tài khoản thành công!', 'warning');
-        loadUsers(1);
+        if (loadedUsersList.length <= 1 && currentUsersPage > 1) {
+            loadUsers(currentUsersPage - 1);
+        } else {
+            loadUsers(currentUsersPage);
+        }
     } catch(e) {
         showToast(e.message || 'Lỗi xóa tài khoản', 'error');
     }
@@ -3105,7 +3290,7 @@ async function assignDepartmentManager() {
         showToast('Đã cập nhật trưởng phòng thành công!', 'success');
         await openDepartmentDetailModal(departmentId);
         await loadItDepartments();
-        await loadUsers(1);
+        await loadUsers(currentUsersPage);
     } catch (e) {
         showToast(e.message || 'Lỗi cập nhật trưởng phòng', 'error');
     }

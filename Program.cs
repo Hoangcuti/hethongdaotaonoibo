@@ -48,6 +48,7 @@ using (var scope = app.Services.CreateScope())
         var context = scope.ServiceProvider.GetRequiredService<CorporateLmsProContext>();
         context.Database.EnsureCreated();
         await context.Database.ExecuteSqlRawAsync(DatabaseCompatibility.SchemaPatchSql);
+        await KhoaHoc.Infrastructure.DatabaseSeeder.SeedAsync(context, forceReset: false);
     }
     catch (Exception ex)
     {

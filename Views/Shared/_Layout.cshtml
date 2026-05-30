@@ -68,14 +68,20 @@
                     </li>
                 </ul>
 
-                @if (role == "Manager")
+                @if (role == "Manager" || role == "Trainer" || role == "Lecturer")
                 {
                     <div class="nav-section-label">Department</div>
                     <ul>
-                        <li class="nav-item"><a class="nav-link" onclick="navigate('members')"><span class="nav-icon">◉</span><span class="nav-text">Nhan vien</span></a></li>
+                        @if (role == "Manager")
+                        {
+                            <li class="nav-item"><a class="nav-link" onclick="navigate('members')"><span class="nav-icon">◉</span><span class="nav-text">Nhan vien</span></a></li>
+                        }
                         <li class="nav-item"><a class="nav-link" onclick="navigate('courses')"><span class="nav-icon">▤</span><span class="nav-text">Khoa hoc</span></a></li>
-                        <li class="nav-item"><a class="nav-link" onclick="navigate('assignments')"><span class="nav-icon">↗</span><span class="nav-text">Phan cong</span></a></li>
-                        <li class="nav-item"><a class="nav-link" onclick="navigate('staff-progress')"><span class="nav-icon">◔</span><span class="nav-text">Tien do</span></a></li>
+                        @if (role == "Manager")
+                        {
+                            <li class="nav-item"><a class="nav-link" onclick="navigate('assignments')"><span class="nav-icon">↗</span><span class="nav-text">Phan cong</span></a></li>
+                            <li class="nav-item"><a class="nav-link" onclick="navigate('staff-progress')"><span class="nav-icon">◔</span><span class="nav-text">Tien do</span></a></li>
+                        }
                         <li class="nav-item"><a class="nav-link" onclick="navigate('documents')"><span class="nav-icon">≣</span><span class="nav-text">Tai lieu</span></a></li>
                     </ul>
                 }

@@ -303,6 +303,25 @@ public class ITController : Controller
         return View();
     }
 
+    // API: Reset và Gieo dữ liệu mẫu thực tế
+    [HttpPost("/api/it/force-seed")]
+    public async Task<IActionResult> ForceSeed()
+    {
+        var auth = RequireIT();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        try
+        {
+            await KhoaHoc.Infrastructure.DatabaseSeeder.SeedAsync(_db, forceReset: true);
+            return Ok(new { success = true, message = "Gieo dữ liệu thực tế thành công!" });
+        }
+        catch (Exception ex)
+        {
+            var inner = ex.InnerException != null ? $"\nChi tiết: {ex.InnerException.Message}" : "";
+            return StatusCode(500, new { error = "Lỗi khi gieo dữ liệu: " + ex.Message + inner });
+        }
+    }
+
     // API: Thống kê tổng quan hệ thống
     [HttpGet("/api/it/stats")]
     public async Task<IActionResult> Stats()
@@ -397,9 +416,23 @@ public class ITController : Controller
         if (string.IsNullOrWhiteSpace(dto.Username) || string.IsNullOrWhiteSpace(dto.Password))
             return BadRequest(new { error = "Username và Password là bắt buộc." });
 
+        // Chuẩn hóa email và username sang chữ thường, bắt buộc đuôi @basau.net
+        if (!string.IsNullOrWhiteSpace(dto.Email))
+        {
+            dto.Email = dto.Email.Split('@')[0].Trim().ToLower() + "@basau.net";
+        }
+        if (!string.IsNullOrWhiteSpace(dto.Username))
+        {
+            dto.Username = dto.Username.Split('@')[0].Trim().ToLower();
+        }
+        else if (!string.IsNullOrWhiteSpace(dto.Email))
+        {
+            dto.Username = dto.Email.Split('@')[0].Trim().ToLower();
+        }
+
         // Kiểm tra username trùng
         if (await _db.Users.AnyAsync(u => u.Username == dto.Username))
-            return BadRequest(new { error = "Username d? t?n t?i." });
+            return BadRequest(new { error = "Username đã tồn tại." });
 
         var passwordHash = SHA256.HashData(Encoding.UTF8.GetBytes(dto.Password));
 
@@ -456,6 +489,12 @@ public class ITController : Controller
 
         var user = await _db.Users.FindAsync(id);
         if (user == null) return NotFound();
+
+        // Chuẩn hóa email nếu có cập nhật
+        if (!string.IsNullOrWhiteSpace(dto.Email))
+        {
+            dto.Email = dto.Email.Split('@')[0].Trim().ToLower() + "@basau.net";
+        }
 
         user.FullName = dto.FullName ?? user.FullName;
         user.Email = dto.Email ?? user.Email;

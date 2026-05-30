@@ -35,9 +35,15 @@ public partial class Exam
     [Column("TargetDepartmentId")]
     public int? TargetDepartmentId { get; set; }
 
+    [Column("ModuleID")]
+    public int? ModuleId { get; set; }
+
     [ForeignKey("CourseId")]
     [InverseProperty("Exams")]
     public virtual Course? Course { get; set; }
+
+    [ForeignKey("ModuleId")]
+    public virtual CourseModule? Module { get; set; }
 
     [InverseProperty("Exam")]
     public virtual ICollection<ExamQuestion> ExamQuestions { get; set; } = new List<ExamQuestion>();
