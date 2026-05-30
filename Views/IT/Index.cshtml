@@ -407,10 +407,10 @@
             <div class="table-wrapper">
                 <table class="lms-table">
                     <thead>
-                        <tr><th>ID</th><th>Tên file</th><th>Loại</th><th>Thời gian tạo</th></tr>
+                        <tr><th>ID</th><th>Tên file</th><th>Loại</th><th>Thời gian tạo</th><th style="width:180px">Thao tác</th></tr>
                     </thead>
                     <tbody id="backupLogsTable">
-                        <tr><td colspan="4"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
+                        <tr><td colspan="5"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
                     </tbody>
                 </table>
             </div>
@@ -867,6 +867,10 @@
             </div>
             <div style="display:flex; gap:15px; align-items:center;">
                 <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:12px; font-weight:600;">Lọc Mã môn:</span>
+                    <input id="builderCourseCodeFilter" type="text" class="form-input" style="width:140px; height:32px; padding:2px 8px; font-size:12px;" placeholder="Ví dụ: ITSEC101..." oninput="loadBuilderLibrary()">
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
                     <span style="font-size:12px; font-weight:600;">Lọc Level:</span>
                     <select id="builderLevelFilter" class="form-input" style="width:120px; height:32px; padding:2px 8px;" onchange="loadBuilderLibrary()">
                         <option value="">Tất cả</option>
@@ -1198,6 +1202,11 @@
             <div class="grid-2">
                 <div class="form-group"><label>Ngày bắt đầu</label><input id="editExamStartDateInput" type="date" class="form-input"></div>
                 <div class="form-group"><label>Ngày kết thúc</label><input id="editExamEndDateInput" type="date" class="form-input"></div>
+            </div>
+            <div style="margin-top: 15px; border-top: 1px dashed #cbd5e1; padding-top: 15px;">
+                <button type="button" class="btn btn-secondary" style="width:100%; border:1px solid #cbd5e1; height: 38px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; background: #f8fafc;" onclick="closeModal('editExamModal'); openExamQuestionsManagementModal(document.getElementById('editExamId').value);">
+                    ⚙️ Xem & Thiết kế câu hỏi Quiz
+                </button>
             </div>
         </div>
         <div class="modal-footer"><button class="btn btn-primary" onclick="submitEditExam()">💾 Lưu</button></div>

@@ -4893,4 +4893,4 @@ C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\refint
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\KhoaHoc.pdb
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\KhoaHoc.genruntimeconfig.cache
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\ref\KhoaHoc.dll
-C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\yuf0nz6cuo-7d0po5gdyn.gz
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\yuf0nz6cuo-w63rxbjf5d.gz
