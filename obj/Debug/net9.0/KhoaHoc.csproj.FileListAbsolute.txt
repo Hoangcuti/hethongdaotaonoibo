@@ -4821,6 +4821,7 @@ C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compre
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\qbc6emyerv-b9sayid5wm.gz
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\n6vxhuumf0-61n19gt1b8.gz
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\rgwdlhkd9i-o7mws47i9j.gz
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\yuf0nz6cuo-w63rxbjf5d.gz
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\ibm4f3wmt2-xtxxf3hu2r.gz
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\texln3mbgw-t1cqhe9u97.gz
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\n8tmnijd9t-c2jlpeoesf.gz
@@ -4893,4 +4894,4 @@ C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\refint
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\KhoaHoc.pdb
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\KhoaHoc.genruntimeconfig.cache
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\ref\KhoaHoc.dll
-C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\yuf0nz6cuo-w63rxbjf5d.gz
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\n3c2omw3ae-is0eghor97.gz
