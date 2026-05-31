@@ -303,6 +303,25 @@ public class ITController : Controller
         return View();
     }
 
+    // API: Reset và Gieo dữ liệu mẫu thực tế
+    [HttpPost("/api/it/force-seed")]
+    public async Task<IActionResult> ForceSeed()
+    {
+        var auth = RequireIT();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        try
+        {
+            await KhoaHoc.Infrastructure.DatabaseSeeder.SeedAsync(_db, forceReset: true);
+            return Ok(new { success = true, message = "Gieo dữ liệu thực tế thành công!" });
+        }
+        catch (Exception ex)
+        {
+            var inner = ex.InnerException != null ? $"\nChi tiết: {ex.InnerException.Message}" : "";
+            return StatusCode(500, new { error = "Lỗi khi gieo dữ liệu: " + ex.Message + inner });
+        }
+    }
+
     // API: Thống kê tổng quan hệ thống
     [HttpGet("/api/it/stats")]
     public async Task<IActionResult> Stats()
@@ -397,9 +416,23 @@ public class ITController : Controller
         if (string.IsNullOrWhiteSpace(dto.Username) || string.IsNullOrWhiteSpace(dto.Password))
             return BadRequest(new { error = "Username và Password là bắt buộc." });
 
+        // Chuẩn hóa email và username sang chữ thường, bắt buộc đuôi @basau.net
+        if (!string.IsNullOrWhiteSpace(dto.Email))
+        {
+            dto.Email = dto.Email.Split('@')[0].Trim().ToLower() + "@basau.net";
+        }
+        if (!string.IsNullOrWhiteSpace(dto.Username))
+        {
+            dto.Username = dto.Username.Split('@')[0].Trim().ToLower();
+        }
+        else if (!string.IsNullOrWhiteSpace(dto.Email))
+        {
+            dto.Username = dto.Email.Split('@')[0].Trim().ToLower();
+        }
+
         // Kiểm tra username trùng
         if (await _db.Users.AnyAsync(u => u.Username == dto.Username))
-            return BadRequest(new { error = "Username d? t?n t?i." });
+            return BadRequest(new { error = "Username đã tồn tại." });
 
         var passwordHash = SHA256.HashData(Encoding.UTF8.GetBytes(dto.Password));
 
@@ -456,6 +489,12 @@ public class ITController : Controller
 
         var user = await _db.Users.FindAsync(id);
         if (user == null) return NotFound();
+
+        // Chuẩn hóa email nếu có cập nhật
+        if (!string.IsNullOrWhiteSpace(dto.Email))
+        {
+            dto.Email = dto.Email.Split('@')[0].Trim().ToLower() + "@basau.net";
+        }
 
         user.FullName = dto.FullName ?? user.FullName;
         user.Email = dto.Email ?? user.Email;
@@ -1196,6 +1235,7 @@ public class ITController : Controller
                 ModuleTitle = l.Module != null ? l.Module.Title : null,
                 CourseId = l.Module != null ? l.Module.CourseId : null,
                 CourseTitle = l.Module != null && l.Module.Course != null ? l.Module.Course.Title : null,
+                CourseCode = l.Module != null && l.Module.Course != null ? l.Module.Course.CourseCode : null,
                 AttachmentsCount = l.LessonAttachments.Count,
                 Attachments = l.LessonAttachments
                     .OrderBy(a => a.AttachmentId)
@@ -2221,7 +2261,7 @@ public class ITController : Controller
         var auth = RequireIT();
         if (auth != null) return Json(new { error = "Unauthorized" });
 
-        var fileName = $"LMS_Backup_{dto.BackupType}_{DateTime.Now:yyyyMMdd_HHmmss}.bak";
+        var fileName = $"LMS_Backup_{dto.BackupType}_{DateTime.Now:yyyyMMdd_HHmmss}.sql";
         var backup = new BackupLog
         {
             FileName = fileName,
@@ -2230,8 +2270,281 @@ public class ITController : Controller
         };
         _db.BackupLogs.Add(backup);
         await _db.SaveChangesAsync();
+
+        // Write physical SQL backup file to disk under wwwroot/backups
+        try
+        {
+            var backupDir = Path.Combine(_env.WebRootPath ?? "wwwroot", "backups");
+            if (!Directory.Exists(backupDir))
+            {
+                Directory.CreateDirectory(backupDir);
+            }
+            var filePath = Path.Combine(backupDir, fileName);
+
+            var sqlContent = await GenerateSqlDumpAsync();
+            await System.IO.File.WriteAllTextAsync(filePath, sqlContent, Encoding.UTF8);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating physical backup file: " + fileName);
+        }
+
         return Ok(new { success = true, fileName, backupId = backup.BackupId });
     }
+
+    [HttpGet("/api/it/backuplogs/download/{id}")]
+    public async Task<IActionResult> DownloadBackup(int id)
+    {
+        var auth = RequireIT();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        var backup = await _db.BackupLogs.FindAsync(id);
+        if (backup == null || string.IsNullOrEmpty(backup.FileName)) return NotFound(new { error = "Không tìm thấy bản backup hoặc tên file trống" });
+
+        // Ensure file name matches .sql or keep original
+        var downloadFileName = backup.FileName;
+        if (downloadFileName.EndsWith(".bak", StringComparison.OrdinalIgnoreCase))
+        {
+            downloadFileName = Path.ChangeExtension(downloadFileName, ".sql");
+        }
+
+        var backupDir = Path.Combine(_env.WebRootPath ?? "wwwroot", "backups");
+        var filePath = Path.Combine(backupDir, backup.FileName);
+
+        if (!System.IO.File.Exists(filePath))
+        {
+            try
+            {
+                if (!Directory.Exists(backupDir))
+                {
+                    Directory.CreateDirectory(backupDir);
+                }
+                var sqlContent = await GenerateSqlDumpAsync();
+                await System.IO.File.WriteAllTextAsync(filePath, sqlContent, Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error regenerating backup file on the fly: " + backup.FileName);
+            }
+        }
+
+        if (System.IO.File.Exists(filePath))
+        {
+            var bytes = await System.IO.File.ReadAllBytesAsync(filePath);
+            return File(bytes, "text/plain", downloadFileName);
+        }
+
+        return NotFound(new { error = "Không thể sinh hoặc tìm thấy file backup vật lý" });
+    }
+
+    [HttpDelete("/api/it/backuplogs/{id}")]
+    public async Task<IActionResult> DeleteBackup(int id)
+    {
+        var auth = RequireIT();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        var backup = await _db.BackupLogs.FindAsync(id);
+        if (backup == null || string.IsNullOrEmpty(backup.FileName)) return NotFound(new { error = "Không tìm thấy bản backup" });
+
+        var backupDir = Path.Combine(_env.WebRootPath ?? "wwwroot", "backups");
+        var filePath = Path.Combine(backupDir, backup.FileName);
+
+        if (System.IO.File.Exists(filePath))
+        {
+            try
+            {
+                System.IO.File.Delete(filePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting backup file: " + filePath);
+            }
+        }
+
+        _db.BackupLogs.Remove(backup);
+        await _db.SaveChangesAsync();
+
+        return Ok(new { success = true });
+    }
+
+    private async Task<string> GenerateSqlDumpAsync()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("-- ========================================================");
+        sb.AppendLine($"-- LMS Corporate Database Backup SQL Dump");
+        sb.AppendLine($"-- Generated At: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine($"-- Host database: db48874.public.databaseasp.net");
+        sb.AppendLine("-- ========================================================");
+        sb.AppendLine();
+
+        // Disable constraint checks to allow inserting out-of-order safely
+        sb.AppendLine("EXEC sp_MSforeachtable \"ALTER TABLE ? NOCHECK CONSTRAINT all\";");
+        sb.AppendLine();
+
+        try
+        {
+            sb.Append(GenerateTableInserts(await _db.SystemSettings.ToListAsync(), "SystemSettings"));
+            sb.Append(GenerateTableInserts(await _db.Roles.ToListAsync(), "Roles"));
+            sb.Append(GenerateTableInserts(await _db.Departments.ToListAsync(), "Departments"));
+            sb.Append(GenerateTableInserts(await _db.JobTitles.ToListAsync(), "JobTitles"));
+            sb.Append(GenerateTableInserts(await _db.Users.ToListAsync(), "Users"));
+            sb.Append(GenerateTableInserts(await _db.Permissions.ToListAsync(), "Permissions"));
+            sb.Append(GenerateTableInserts(await _db.UserPermissions.ToListAsync(), "UserPermissions"));
+            sb.Append(GenerateTableInserts(await _db.Categories.ToListAsync(), "Categories"));
+            sb.Append(GenerateTableInserts(await _db.Courses.ToListAsync(), "Courses"));
+            sb.Append(GenerateTableInserts(await _db.CourseModules.ToListAsync(), "CourseModules"));
+            sb.Append(GenerateTableInserts(await _db.Lessons.ToListAsync(), "Lessons"));
+            sb.Append(GenerateTableInserts(await _db.LessonAttachments.ToListAsync(), "LessonAttachments"));
+            sb.Append(GenerateTableInserts(await _db.Exams.ToListAsync(), "Exams"));
+            sb.Append(GenerateTableInserts(await _db.ExamQuestions.ToListAsync(), "ExamQuestions"));
+            sb.Append(GenerateTableInserts(await _db.QuestionOptions.ToListAsync(), "QuestionOptions"));
+            sb.Append(GenerateTableInserts(await _db.Enrollments.ToListAsync(), "Enrollments"));
+            sb.Append(GenerateTableInserts(await _db.UserExams.ToListAsync(), "UserExams"));
+            sb.Append(GenerateTableInserts(await _db.UserAnswers.ToListAsync(), "UserAnswers"));
+            sb.Append(GenerateTableInserts(await _db.UserLessonLogs.ToListAsync(), "UserLessonLogs"));
+            sb.Append(GenerateTableInserts(await _db.TrainingAssignments.ToListAsync(), "TrainingAssignments"));
+            sb.Append(GenerateTableInserts(await _db.Faqs.ToListAsync(), "Faqs"));
+            sb.Append(GenerateTableInserts(await _db.OfflineTrainingEvents.ToListAsync(), "OfflineTrainingEvents"));
+            sb.Append(GenerateTableInserts(await _db.AttendanceLogs.ToListAsync(), "AttendanceLogs"));
+            sb.Append(GenerateTableInserts(await _db.DocumentLibraries.ToListAsync(), "DocumentLibrary"));
+            sb.Append(GenerateTableInserts(await _db.Badges.ToListAsync(), "Badges"));
+            sb.Append(GenerateTableInserts(await _db.UserBadges.ToListAsync(), "UserBadges"));
+            sb.Append(GenerateTableInserts(await _db.Certificates.ToListAsync(), "Certificates"));
+            sb.Append(GenerateTableInserts(await _db.Skills.ToListAsync(), "Skills"));
+            sb.Append(GenerateTableInserts(await _db.UserSkills.ToListAsync(), "UserSkills"));
+            sb.Append(GenerateTableInserts(await _db.DeptRequiredSkills.ToListAsync(), "DeptRequiredSkills"));
+            sb.Append(GenerateTableInserts(await _db.LearningPaths.ToListAsync(), "LearningPaths"));
+            sb.Append(GenerateTableInserts(await _db.PathCourses.ToListAsync(), "PathCourses"));
+            sb.Append(GenerateTableInserts(await _db.UserPathProgresses.ToListAsync(), "UserPathProgresses"));
+            sb.Append(GenerateTableInserts(await _db.Surveys.ToListAsync(), "Surveys"));
+            sb.Append(GenerateTableInserts(await _db.SurveyResults.ToListAsync(), "SurveyResults"));
+            sb.Append(GenerateTableInserts(await _db.NewsletterSubscriptions.ToListAsync(), "NewsletterSubscriptions"));
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"-- ERROR during backup generation: {ex.Message}");
+            _logger.LogError(ex, "Error generating tables data inserts in SQL backup");
+        }
+
+        sb.AppendLine();
+        // Re-enable constraint checks
+        sb.AppendLine("EXEC sp_MSforeachtable \"ALTER TABLE ? WITH CHECK CHECK CONSTRAINT all\";");
+
+        return sb.ToString();
+    }
+
+    private string GenerateTableInserts<T>(List<T> items, string tableName)
+    {
+        if (items == null || !items.Any()) return $"-- Table {tableName} is empty\n\n";
+
+        var sb = new StringBuilder();
+        var type = typeof(T);
+
+        // Get properties that map to database columns and are not NotMapped
+        var properties = type.GetProperties()
+            .Where(p => {
+                var t = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+                var isPrimitiveOrBasic = t.IsPrimitive ||
+                       t == typeof(string) ||
+                       t == typeof(DateTime) ||
+                       t == typeof(decimal) ||
+                       t == typeof(Guid);
+                if (!isPrimitiveOrBasic) return false;
+
+                var isNotMapped = p.GetCustomAttributes(typeof(System.ComponentModel.DataAnnotations.Schema.NotMappedAttribute), true).Any();
+                return !isNotMapped;
+            })
+            .ToList();
+
+        if (!properties.Any()) return $"-- Table {tableName} has no mapable columns\n\n";
+
+        // Map property name to column name using ColumnAttribute if present
+        var columnMappings = properties.Select(p => {
+            var colAttr = p.GetCustomAttributes(typeof(System.ComponentModel.DataAnnotations.Schema.ColumnAttribute), true)
+                .FirstOrDefault() as System.ComponentModel.DataAnnotations.Schema.ColumnAttribute;
+            return new { Property = p, ColumnName = colAttr?.Name ?? p.Name };
+        }).ToList();
+
+        var columnsList = string.Join(", ", columnMappings.Select(c => $"[{c.ColumnName}]"));
+
+        // Determine if table has an identity column using EF Core Metadata
+        string? identityColumnName = null;
+        try
+        {
+            var entityType = _db.Model.FindEntityType(type);
+            var primaryKey = entityType?.FindPrimaryKey();
+            var hasIdentity = primaryKey?.Properties.Any(p => p.ValueGenerated == Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.OnAdd) ?? false;
+            if (hasIdentity && primaryKey != null && primaryKey.Properties.Any())
+            {
+                var keyProp = primaryKey.Properties.First();
+                var propInfo = type.GetProperty(keyProp.Name);
+                var colAttr = propInfo?.GetCustomAttributes(typeof(System.ComponentModel.DataAnnotations.Schema.ColumnAttribute), true)
+                    .FirstOrDefault() as System.ComponentModel.DataAnnotations.Schema.ColumnAttribute;
+                identityColumnName = colAttr?.Name ?? keyProp.Name;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error detecting identity column for " + tableName);
+        }
+
+        sb.AppendLine($"-- Table: {tableName}");
+        if (!string.IsNullOrEmpty(identityColumnName))
+        {
+            sb.AppendLine($"SET IDENTITY_INSERT [{tableName}] ON;");
+        }
+
+        foreach (var item in items)
+        {
+            var valuesList = new List<string>();
+            foreach (var mapping in columnMappings)
+            {
+                var val = mapping.Property.GetValue(item);
+                if (val == null)
+                {
+                    valuesList.Add("NULL");
+                }
+                else
+                {
+                    var underlyingType = Nullable.GetUnderlyingType(mapping.Property.PropertyType) ?? mapping.Property.PropertyType;
+                    if (underlyingType == typeof(string))
+                    {
+                        var str = val.ToString()!.Replace("'", "''");
+                        valuesList.Add($"N'{str}'");
+                    }
+                    else if (underlyingType == typeof(DateTime))
+                    {
+                        var dt = (DateTime)val;
+                        valuesList.Add($"'{dt:yyyy-MM-dd HH:mm:ss.fff}'");
+                    }
+                    else if (underlyingType == typeof(bool))
+                    {
+                        valuesList.Add((bool)val ? "1" : "0");
+                    }
+                    else if (underlyingType == typeof(decimal) || underlyingType == typeof(double) || underlyingType == typeof(float))
+                    {
+                        valuesList.Add(Convert.ToString(val, System.Globalization.CultureInfo.InvariantCulture)!);
+                    }
+                    else
+                    {
+                        valuesList.Add(val.ToString()!);
+                    }
+                }
+            }
+            var values = string.Join(", ", valuesList);
+            sb.AppendLine($"INSERT INTO [{tableName}] ({columnsList}) VALUES ({values});");
+        }
+
+        if (!string.IsNullOrEmpty(identityColumnName))
+        {
+            sb.AppendLine($"SET IDENTITY_INSERT [{tableName}] OFF;");
+        }
+        sb.AppendLine();
+
+        return sb.ToString();
+    }
+
+
 
     // ============================================================
     // API: PERMISSIONS

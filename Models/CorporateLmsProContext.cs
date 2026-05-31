@@ -273,6 +273,11 @@ public partial class CorporateLmsProContext : DbContext
             entity.HasKey(e => e.ExamId).HasName("PK__Exams__297521A70F2A8A3E");
 
             entity.HasOne(d => d.Course).WithMany(p => p.Exams).HasConstraintName("FK__Exams__CourseID__41EDCAC5");
+
+            entity.HasOne(d => d.Module)
+                .WithMany()
+                .HasForeignKey(d => d.ModuleId)
+                .HasConstraintName("FK_Exams_CourseModules");
         });
 
         modelBuilder.Entity<ExamQuestion>(entity =>

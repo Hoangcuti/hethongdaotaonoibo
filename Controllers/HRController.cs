@@ -23,7 +23,7 @@ public class HRController : Controller
         var role = HttpContext.Session.GetString("Role");
         if (HttpContext.Session.GetString("UserID") == null)
             return RedirectToAction("Login", "Auth");
-        if (role != "Manager" && role != "IT")
+        if (role != "Manager" && role != "IT" && role != "Trainer" && role != "Lecturer")
             return RedirectToAction("Login", "Auth");
         return null;
     }
@@ -34,6 +34,9 @@ public class HRController : Controller
     private int GetCurrentDeptId() =>
         int.Parse(HttpContext.Session.GetString("DepartmentID") ?? "0");
 
+    private bool IsTrainingCenter() =>
+        HttpContext.Session.GetString("DepartmentName") == "Trung tâm Đào tạo Nội bộ";
+
     private IActionResult? RequireDepartmentManagerApi()
     {
         var auth = RequireManager();
@@ -41,10 +44,35 @@ public class HRController : Controller
             return Json(new { error = "Unauthorized" });
 
         var role = HttpContext.Session.GetString("Role");
-        if (role != "Manager" || GetCurrentDeptId() <= 0)
+        if ((role != "Manager" && role != "IT") || GetCurrentDeptId() <= 0)
             return StatusCode(StatusCodes.Status403Forbidden, new { error = "Chỉ trưởng phòng mới có quyền thực hiện thao tác này." });
 
         return null;
+    }
+
+    private static string GetDeptPrefix(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return "NV";
+        var lower = name.ToLower().Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder();
+        foreach (var c in lower)
+        {
+            var uc = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+            if (uc != System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                sb.Append(c);
+            }
+        }
+        var clean = sb.ToString().Replace("đ", "d");
+        
+        if (clean.Contains("giam doc")) return "GD";
+        if (clean.Contains("nhan su")) return "HR";
+        if (clean.Contains("ky thuat") || clean.Contains("san xuat")) return "KT";
+        if (clean.Contains("kinh doanh") || clean.Contains("marketing")) return "KD";
+        if (clean.Contains("tai chinh") || clean.Contains("ke toan")) return "TC";
+        if (clean.Contains("cong nghe") || clean.Contains("thong tin") || clean.Contains("it")) return "IT";
+        if (clean.Contains("dao tao") || clean.Contains("giang vien")) return "GV";
+        return "NV";
     }
 
     // Dashboard chính HR
@@ -59,8 +87,8 @@ public class HRController : Controller
     [HttpGet("/api/hr/stats")]
     public async Task<IActionResult> Stats()
     {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
+        var auth = RequireDepartmentManagerApi();
+        if (auth != null) return auth;
 
         int deptId = GetCurrentDeptId();
         var query = _db.Users.Where(u => u.Status == "Active");
@@ -88,6 +116,18 @@ public class HRController : Controller
             .Where(b => b.Year == DateTime.Now.Year && (deptId == 0 || b.DeptId == deptId))
             .SumAsync(b => (decimal?)b.SpentAmount) ?? 0;
 
+        string deptName = "Hệ thống";
+        string deptPrefix = "HR";
+        if (deptId > 0)
+        {
+            var dept = await _db.Departments.FirstOrDefaultAsync(d => d.DepartmentId == deptId);
+            if (dept != null)
+            {
+                deptName = dept.DepartmentName;
+                deptPrefix = GetDeptPrefix(deptName);
+            }
+        }
+
         return Json(new
         {
             totalEmployees,
@@ -96,7 +136,9 @@ public class HRController : Controller
             totalCertificates,
             totalBudget = budgetData,
             spentBudget = spentData,
-            budgetUsagePercent = budgetData > 0 ? Math.Round(spentData / budgetData * 100, 1) : 0
+            budgetUsagePercent = budgetData > 0 ? Math.Round(spentData / budgetData * 100, 1) : 0,
+            deptName,
+            deptPrefix
         });
     }
 
@@ -104,8 +146,8 @@ public class HRController : Controller
     [HttpGet("/api/hr/assignments")]
     public async Task<IActionResult> GetAssignments(string? search, string? priority, int page = 1, int pageSize = 15)
     {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
+        var auth = RequireDepartmentManagerApi();
+        if (auth != null) return auth;
 
         int deptId = GetCurrentDeptId();
         var query = _db.TrainingAssignments
@@ -153,6 +195,11 @@ public class HRController : Controller
         var auth = RequireDepartmentManagerApi();
         if (auth != null) return auth;
 
+        if (dto.UserId == GetCurrentUserId())
+        {
+            return BadRequest(new { error = "Trưởng phòng không được phép tự phân công khóa học cho chính mình." });
+        }
+
         var assignment = new TrainingAssignment
         {
             UserId = dto.UserId,
@@ -189,8 +236,8 @@ public class HRController : Controller
     [HttpGet("/api/hr/budget")]
     public async Task<IActionResult> GetBudget(int? year)
     {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
+        var auth = RequireDepartmentManagerApi();
+        if (auth != null) return auth;
 
         int targetYear = year ?? DateTime.Now.Year;
         int deptId = GetCurrentDeptId();
@@ -220,8 +267,8 @@ public class HRController : Controller
     [HttpGet("/api/hr/skills")]
     public async Task<IActionResult> SkillReport(int? departmentId)
     {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
+        var auth = RequireDepartmentManagerApi();
+        if (auth != null) return auth;
 
         var query = _db.UserSkills
             .Include(us => us.User)
@@ -255,8 +302,8 @@ public class HRController : Controller
     [HttpGet("/api/hr/training-progress")]
     public async Task<IActionResult> TrainingProgress()
     {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
+        var auth = RequireDepartmentManagerApi();
+        if (auth != null) return auth;
 
         var data = await _db.Enrollments
             .Include(e => e.User)
@@ -283,12 +330,14 @@ public class HRController : Controller
     [HttpGet("/api/hr/employees")]
     public async Task<IActionResult> GetEmployees(int? departmentId)
     {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
+        var auth = RequireDepartmentManagerApi();
+        if (auth != null) return auth;
 
         int currentDeptId = GetCurrentDeptId();
+        int currentUserId = GetCurrentUserId();
         var query = _db.Users
             .Include(u => u.Department)
+            .Where(u => u.UserId != currentUserId)
             .AsQueryable();
 
         if (currentDeptId > 0)
@@ -318,8 +367,8 @@ public class HRController : Controller
     [HttpGet("/api/hr/employees/{id}/profile")]
     public async Task<IActionResult> GetEmployeeProfile(int id)
     {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
+        var auth = RequireDepartmentManagerApi();
+        if (auth != null) return auth;
 
         var user = await _db.Users
             .Include(u => u.Department)
@@ -369,8 +418,8 @@ public class HRController : Controller
     [HttpPatch("/api/hr/employees/{id}/status")]
     public async Task<IActionResult> UpdateEmployeeStatus(int id, [FromBody] string status)
     {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
+        var auth = RequireDepartmentManagerApi();
+        if (auth != null) return auth;
 
         var user = await _db.Users.FindAsync(id);
         if (user == null) return NotFound();
@@ -401,16 +450,23 @@ public class HRController : Controller
     [HttpGet("/api/hr/courses")]
     public async Task<IActionResult> GetCourses()
     {
-        var auth = RequireDepartmentManagerApi();
-        if (auth != null) return auth;
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
 
         int deptId = GetCurrentDeptId();
-        var courses = await _db.Courses
-            .Where(c => c.Status != "Deleted")
-            .Where(c => c.IsForAllDepartments == true 
-                     || c.TargetDepartmentId == null 
-                     || c.TargetDepartmentId == deptId 
-                     || c.OwnerDepartmentId == deptId)
+        var currentDept = await _db.Departments.FindAsync(deptId);
+        bool isTrainingCenter = currentDept?.DepartmentName == "Trung tâm Đào tạo Nội bộ";
+
+        var query = _db.Courses.Where(c => c.Status != "Deleted");
+        if (!isTrainingCenter)
+        {
+            query = query.Where(c => c.IsForAllDepartments == true 
+                                  || c.TargetDepartmentId == null 
+                                  || c.TargetDepartmentId == deptId 
+                                  || c.OwnerDepartmentId == deptId);
+        }
+
+        var courses = await query
             .Select(c => new { 
                 c.CourseId, 
                 c.Title, 
@@ -419,14 +475,19 @@ public class HRController : Controller
                 moduleCount = c.CourseModules.Count(),
                 lessonCount = c.CourseModules.SelectMany(m => m.Lessons).Count(),
                 examCount = c.Exams.Count(),
-                isOwned = c.OwnerDepartmentId == deptId,
+                isOwned = isTrainingCenter || c.OwnerDepartmentId == deptId,
                 isGlobal = c.IsForAllDepartments == true
             })
             .ToListAsync();
 
         // Also include pending course requests from DocumentLibrary
-        var pendingCourses = await _db.DocumentLibraries
-            .Where(d => d.SharedByDeptId == deptId && d.TargetType == "course" && d.ApprovalStatus == "Pending")
+        var pendingQuery = _db.DocumentLibraries.AsQueryable();
+        if (!isTrainingCenter)
+        {
+            pendingQuery = pendingQuery.Where(d => d.SharedByDeptId == deptId);
+        }
+        var pendingCourses = await pendingQuery
+            .Where(d => d.TargetType == "course" && d.ApprovalStatus == "Pending")
             .Select(d => new {
                 CourseId = 0, // Not yet created
                 Title = d.Title,
@@ -474,13 +535,13 @@ public class HRController : Controller
     [HttpPut("/api/hr/courses/{id}")]
     public async Task<IActionResult> UpdateDeptCourse(int id, [FromBody] UpdateHrCourseDto dto)
     {
-        var auth = RequireDepartmentManagerApi();
-        if (auth != null) return auth;
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
 
         int deptId = GetCurrentDeptId();
         var course = await _db.Courses.FirstOrDefaultAsync(c => c.CourseId == id);
         if (course == null) return NotFound();
-        if (deptId > 0 && course.OwnerDepartmentId != deptId) return Forbid();
+        if (deptId > 0 && !IsTrainingCenter() && course.OwnerDepartmentId != deptId) return Forbid();
 
         if (!string.IsNullOrWhiteSpace(dto.Title)) course.Title = dto.Title.Trim();
         course.Description = dto.Description ?? course.Description;
@@ -494,8 +555,8 @@ public class HRController : Controller
     [HttpGet("/api/hr/courses/{id}/content")]
     public async Task<IActionResult> GetCourseContent(int id)
     {
-        var auth = RequireDepartmentManagerApi();
-        if (auth != null) return auth;
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
 
         int deptId = GetCurrentDeptId();
         var course = await _db.Courses
@@ -542,13 +603,13 @@ public class HRController : Controller
     [HttpPost("/api/hr/courses/{courseId}/modules")]
     public async Task<IActionResult> CreateCourseModule(int courseId, [FromBody] HrCreateModuleDto dto)
     {
-        var auth = RequireDepartmentManagerApi();
-        if (auth != null) return auth;
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
 
         int deptId = GetCurrentDeptId();
         var course = await _db.Courses.FirstOrDefaultAsync(c => c.CourseId == courseId);
         if (course == null) return NotFound();
-        if (deptId > 0 && course.OwnerDepartmentId != deptId) return Forbid();
+        if (deptId > 0 && !IsTrainingCenter() && course.OwnerDepartmentId != deptId) return Forbid();
         if (string.IsNullOrWhiteSpace(dto.Title)) return BadRequest(new { error = "Tên chương là bắt buộc." });
 
         var module = new CourseModule
@@ -565,13 +626,13 @@ public class HRController : Controller
     [HttpPost("/api/hr/modules/{moduleId}/lessons")]
     public async Task<IActionResult> CreateCourseLesson(int moduleId, [FromBody] HrCreateLessonDto dto)
     {
-        var auth = RequireDepartmentManagerApi();
-        if (auth != null) return auth;
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
 
         var module = await _db.CourseModules.Include(m => m.Course).FirstOrDefaultAsync(m => m.ModuleId == moduleId);
         if (module?.Course == null) return NotFound();
         int deptId = GetCurrentDeptId();
-        if (deptId > 0 && module.Course.OwnerDepartmentId != deptId) return Forbid();
+        if (deptId > 0 && !IsTrainingCenter() && module.Course.OwnerDepartmentId != deptId) return Forbid();
         if (string.IsNullOrWhiteSpace(dto.Title)) return BadRequest(new { error = "Tên bài học là bắt buộc." });
 
         var lesson = new Lesson
@@ -591,8 +652,8 @@ public class HRController : Controller
     [HttpPost("/api/hr/courses/{courseId}/publish")]
     public async Task<IActionResult> PublishCourse(int courseId, [FromBody] HrPublishCourseDto dto)
     {
-        var auth = RequireDepartmentManagerApi();
-        if (auth != null) return auth;
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
 
         int deptId = GetCurrentDeptId();
         var course = await _db.Courses
@@ -600,7 +661,7 @@ public class HRController : Controller
                 .ThenInclude(m => m.Lessons)
             .FirstOrDefaultAsync(c => c.CourseId == courseId);
         if (course == null) return NotFound();
-        if (deptId > 0 && course.OwnerDepartmentId != deptId) return Forbid();
+        if (deptId > 0 && !IsTrainingCenter() && course.OwnerDepartmentId != deptId) return Forbid();
 
         var totalLessons = course.CourseModules.SelectMany(m => m.Lessons).Count();
         if (dto.Publish == true && totalLessons == 0)
@@ -698,8 +759,8 @@ public class HRController : Controller
     [HttpPost("/api/hr/broadcast")]
     public async Task<IActionResult> BroadcastCourse([FromBody] int courseId)
     {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
+        var auth = RequireDepartmentManagerApi();
+        if (auth != null) return auth;
 
         var course = await _db.Courses.FindAsync(courseId);
         if (course == null) return NotFound();
@@ -723,9 +784,15 @@ public class HRController : Controller
         var auth = RequireDepartmentManagerApi();
         if (auth != null) return auth;
 
-        int deptId = GetCurrentDeptId();
+        int userDeptId = GetCurrentDeptId();
+        var currentDept = await _db.Departments.FindAsync(userDeptId);
+        bool isTrainingCenter = currentDept?.DepartmentName == "Trung tâm Đào tạo Nội bộ";
+
+        int targetDeptId = (isTrainingCenter && dto.DepartmentId > 0) ? dto.DepartmentId : userDeptId;
+        int currentUserId = GetCurrentUserId();
+
         var users = await _db.Users
-            .Where(u => u.DepartmentId == deptId && u.Status == "Active")
+            .Where(u => u.DepartmentId == targetDeptId && u.Status == "Active" && u.UserId != currentUserId)
             .ToListAsync();
 
         foreach (var user in users)
@@ -752,6 +819,34 @@ public class HRController : Controller
             }
         }
 
+        // Cập nhật TargetDepartmentId và TargetDepartmentIds của khóa học để học viên mới sau này tự động được giao / xem thấy
+        var course = await _db.Courses.FindAsync(dto.CourseId);
+        if (course != null)
+        {
+            if (course.TargetDepartmentId == null || course.TargetDepartmentId == userDeptId)
+            {
+                course.TargetDepartmentId = targetDeptId;
+            }
+
+            var deptIds = new List<int>();
+            if (!string.IsNullOrEmpty(course.TargetDepartmentIds))
+            {
+                var parts = course.TargetDepartmentIds.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var part in parts)
+                {
+                    if (int.TryParse(part, out int parsedId))
+                    {
+                        deptIds.Add(parsedId);
+                    }
+                }
+            }
+            if (!deptIds.Contains(targetDeptId))
+            {
+                deptIds.Add(targetDeptId);
+                course.TargetDepartmentIds = string.Join(",", deptIds);
+            }
+        }
+
         await _db.SaveChangesAsync();
         return Ok(new { success = true });
     }
@@ -766,15 +861,17 @@ public class HRController : Controller
         int deptId = GetCurrentDeptId();
         if (deptId == 0) return BadRequest("Chỉ Trưởng phòng mới có thể tạo nhân sự.");
 
-        if (await _db.Users.AnyAsync(u => u.Email == dto.Email || u.Username == dto.Email))
+        GenerateEmailAndUsername(dto.FullName, dto.EmployeeCode, out string username, out string email);
+
+        if (await _db.Users.AnyAsync(u => u.Email == email || u.Username == username))
             return BadRequest("Email hoặc Username đã tồn tại.");
 
         var user = new User
         {
-            Username = dto.Email,
+            Username = username,
             PasswordHash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("123456")),
             FullName = dto.FullName,
-            Email = dto.Email,
+            Email = email,
             EmployeeCode = dto.EmployeeCode,
             DepartmentId = deptId,
             IsItadmin = false,
@@ -865,29 +962,77 @@ public class HRController : Controller
     [HttpGet("/api/hr/staff-progress")]
     public async Task<IActionResult> GetStaffProgress()
     {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
+        var auth = RequireDepartmentManagerApi();
+        if (auth != null) return auth;
 
         int deptId = GetCurrentDeptId();
 
         var users = await _db.Users
             .Where(u => u.Status == "Active" && (deptId == 0 || u.DepartmentId == deptId))
-            .Select(u => new
+            .ToListAsync();
+
+        var resultList = new List<object>();
+
+        foreach (var u in users)
+        {
+            // Get enrolled courses for this user
+            var enrolledCourseIds = await _db.Enrollments
+                .Where(e => e.UserId == u.UserId)
+                .Select(e => e.CourseId)
+                .ToListAsync();
+
+            // Find all exams in these enrolled courses
+            var exams = await _db.Exams
+                .Where(e => e.CourseId != null && enrolledCourseIds.Contains(e.CourseId.Value))
+                .ToListAsync();
+
+            var incompleteQuizzes = new List<object>();
+            foreach (var exam in exams)
+            {
+                var attempts = await _db.UserExams
+                    .Where(ue => ue.UserId == u.UserId && ue.ExamId == exam.ExamId)
+                    .ToListAsync();
+
+                var finishedAttemptsCount = attempts.Count(ue => ue.IsFinish == true);
+                var bestScore = attempts.Any(ue => ue.IsFinish == true) 
+                    ? attempts.Where(ue => ue.IsFinish == true).Max(ue => ue.Score ?? 0) 
+                    : 0m;
+                var hasUnfinished = attempts.Any(ue => ue.IsFinish != true);
+
+                var requiredScore = exam.PassScore ?? 50m;
+                
+                // An exam is incomplete if the student hasn't passed it with the required score
+                if (bestScore < requiredScore)
+                {
+                    incompleteQuizzes.Add(new
+                    {
+                        examId = exam.ExamId,
+                        title = exam.ExamTitle ?? "N/A",
+                        courseId = exam.CourseId,
+                        attemptsCount = finishedAttemptsCount,
+                        maxAttempts = exam.MaxAttempts,
+                        bestScore = bestScore,
+                        hasUnfinished = hasUnfinished,
+                        passScore = requiredScore
+                    });
+                }
+            }
+
+            var missingLessons = await _db.Enrollments
+                .Where(e => e.UserId == u.UserId && e.Status != "Completed")
+                .Select(e => new { courseId = e.CourseId, title = e.Course != null ? e.Course.Title : "N/A" })
+                .ToListAsync();
+
+            resultList.Add(new
             {
                 userId = u.UserId,
                 fullName = u.FullName,
-                incompleteQuizzes = _db.UserExams
-                    .Where(ue => ue.UserId == u.UserId && (ue.IsFinish == false || (ue.Exam != null && ue.Score < ue.Exam.PassScore)))
-                    .Select(ue => new { examId = ue.ExamId, title = ue.Exam != null ? ue.Exam.ExamTitle : "N/A" })
-                    .ToList(),
-                missingLessons = _db.Enrollments
-                    .Where(e => e.UserId == u.UserId && e.Status != "Completed")
-                    .Select(e => new { courseId = e.CourseId, title = e.Course != null ? e.Course.Title : "N/A" })
-                    .ToList()
-            })
-            .ToListAsync();
+                incompleteQuizzes,
+                missingLessons
+            });
+        }
 
-        return Json(users);
+        return Json(resultList);
     }
 
     [HttpPost("/api/hr/notify-staff")]
@@ -1004,9 +1149,157 @@ public class HRController : Controller
 
         return Ok(new { success = true });
     }
+
+    [HttpPost("/api/hr/reset-attempts")]
+    public async Task<IActionResult> ResetAttempts([FromBody] ResetAttemptsDto dto)
+    {
+        var auth = RequireDepartmentManagerApi();
+        if (auth != null) return auth;
+
+        var exam = await _db.Exams.FindAsync(dto.ExamId);
+        if (exam == null) return NotFound(new { error = "Không tìm thấy bài thi" });
+
+        // Delete user answers
+        await _db.Database.ExecuteSqlRawAsync(
+            "DELETE FROM UserAnswers WHERE UserExamID IN (SELECT UserExamID FROM UserExams WHERE UserID = {0} AND ExamID = {1})", 
+            dto.UserId, dto.ExamId);
+
+        // Delete quiz session states
+        await _db.Database.ExecuteSqlRawAsync(
+            "DELETE FROM QuizSessionStates WHERE UserExamID IN (SELECT UserExamID FROM UserExams WHERE UserID = {0} AND ExamID = {1})", 
+            dto.UserId, dto.ExamId);
+
+        // Delete user exams
+        await _db.Database.ExecuteSqlRawAsync(
+            "DELETE FROM UserExams WHERE UserID = {0} AND ExamID = {1}", 
+            dto.UserId, dto.ExamId);
+
+        // Recalculate progress
+        if (exam.CourseId.HasValue)
+        {
+            await RecalculateProgressInternalAsync(dto.UserId, exam.CourseId.Value);
+        }
+
+        return Json(new { success = true, message = "Đã reset lượt làm bài thi thành công." });
+    }
+
+    private async Task<int> RecalculateProgressInternalAsync(int userId, int courseId)
+    {
+        var enrollment = await _db.Enrollments.FirstOrDefaultAsync(e => e.UserId == userId && e.CourseId == courseId);
+        if (enrollment == null) return 0;
+
+        var totalLessons = await _db.Lessons
+            .Where(l => _db.CourseModules.Any(m => m.ModuleId == l.ModuleId && m.CourseId == courseId))
+            .CountAsync();
+            
+        var totalExams = await _db.Exams
+            .Where(e => e.CourseId == courseId)
+            .CountAsync();
+            
+        var totalItems = totalLessons + totalExams;
+
+        var completedLessons = await _db.UserLessonLogs
+            .Where(l => l.UserId == userId && l.Status == "Completed" && 
+                        _db.Lessons.Any(ls => ls.LessonId == l.LessonId && 
+                                             _db.CourseModules.Any(m => m.ModuleId == ls.ModuleId && m.CourseId == courseId)))
+            .CountAsync();
+            
+        var completedExams = await _db.UserExams
+            .Where(ue => ue.UserId == userId && ue.IsFinish == true &&
+                        _db.Exams.Any(e => e.ExamId == ue.ExamId && e.CourseId == courseId && 
+                                          ue.Score >= (e.PassScore ?? 50)))
+            .Select(ue => ue.ExamId)
+            .Distinct()
+            .CountAsync();
+
+        var completedItems = completedLessons + completedExams;
+        var progressPercent = totalItems > 0 ? (int)Math.Round((double)completedItems / totalItems * 100) : 0;
+        
+        enrollment.ProgressPercent = progressPercent;
+        enrollment.Status = progressPercent switch
+        {
+            >= 100 => "Completed",
+            > 0 => "InProgress",
+            _ => "NotStarted"
+        };
+
+        await _db.SaveChangesAsync();
+        return progressPercent;
+    }
+
+    public static void GenerateEmailAndUsername(string fullName, string employeeCode, out string username, out string email)
+    {
+        if (string.IsNullOrWhiteSpace(fullName))
+        {
+            username = "user" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            email = username + "@basau.net";
+            return;
+        }
+
+        string unsignedName = RemoveSign4VietnameseString(fullName.Trim());
+        var parts = unsignedName.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length == 0)
+        {
+            username = "user" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            email = username + "@basau.net";
+            return;
+        }
+
+        string ten = parts[parts.Length - 1].ToLower();
+
+        string hoDemChars = "";
+        for (int i = 0; i < parts.Length - 1; i++)
+        {
+            if (parts[i].Length > 0)
+            {
+                hoDemChars += parts[i].Substring(0, 1).ToLower();
+            }
+        }
+
+        string normalizedEmpCode = (employeeCode ?? "").Trim().ToLower();
+
+        username = ten + hoDemChars + normalizedEmpCode;
+        email = username + "@basau.net";
+    }
+
+    private static readonly string[] VietNameseSigns = new string[]
+    {
+        "aAeEoOuUiIdDyY",
+        "áàạảãâấầậẩẫăắằặẳẵ",
+        "ÁÀẠẢÃÂẤẦẬẨẪĂẮẰẶẲẴ",
+        "éèẹẻẽêếềệểễ",
+        "ÉÈẸẺẼÊẾỀỆỂỄ",
+        "óòọỏõôốồộổỗơớờợởỡ",
+        "ÓÒỌỎÕÔỐỒỘỔỖƠỚỜỢỞỠ",
+        "úùụủũưứừựửữ",
+        "ÚÙỤỦŨƯỨỪỰỬỮ",
+        "íìịỉĩ",
+        "ÍÌỊỈĨ",
+        "đ",
+        "Đ",
+        "ýỳỵỷỹ",
+        "ÝỲỴỶỸ"
+    };
+
+    public static string RemoveSign4VietnameseString(string str)
+    {
+        for (int i = 1; i < VietNameseSigns.Length; i++)
+        {
+            for (int j = 0; j < VietNameseSigns[i].Length; j++)
+                str = str.Replace(VietNameseSigns[i][j], VietNameseSigns[0][i - 1]);
+        }
+        return str;
+    }
 }
 
 // DTOs
+public class ResetAttemptsDto
+{
+    public int UserId { get; set; }
+    public int ExamId { get; set; }
+}
+
 public class NotifyStaffDto
 {
     public int UserId { get; set; }

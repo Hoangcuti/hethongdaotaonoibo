@@ -407,10 +407,10 @@
             <div class="table-wrapper">
                 <table class="lms-table">
                     <thead>
-                        <tr><th>ID</th><th>Tên file</th><th>Loại</th><th>Thời gian tạo</th></tr>
+                        <tr><th>ID</th><th>Tên file</th><th>Loại</th><th>Thời gian tạo</th><th style="width:180px">Thao tác</th></tr>
                     </thead>
                     <tbody id="backupLogsTable">
-                        <tr><td colspan="4"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
+                        <tr><td colspan="5"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
                     </tbody>
                 </table>
             </div>
@@ -458,6 +458,25 @@
     </div>
 
     <div id="settings" class="page-section" style="display:none">
+        <!-- Card: Gieo dữ liệu thực tế -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">🌱 Khởi tạo & Gieo dữ liệu thực tế</div>
+                    <div class="card-subtitle">Chức năng này sẽ dọn sạch dữ liệu cũ và gieo lại bộ dữ liệu doanh nghiệp mẫu thực tế.</div>
+                </div>
+            </div>
+            <div class="card-body" style="padding: 20px;">
+                <div style="background: rgba(234,88,12,0.08); border: 1px solid rgba(234,88,12,0.3); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+                    <strong style="color: #ea580c; display: block; margin-bottom: 4px;">⚠️ CẢNH BÁO MẤT DỮ LIỆU:</strong>
+                    <span style="font-size: 13px; color: #7c2d12;">Toàn bộ dữ liệu kiểm thử hiện tại (Bài học, Khóa học, Điểm danh, Người dùng,...) sẽ bị xóa sạch hoàn toàn để thiết lập cấu trúc dữ liệu mới bám sát thực tế doanh nghiệp. Hành động này không thể hoàn tác!</span>
+                </div>
+                <button class="btn btn-primary" style="background: linear-gradient(135deg, #ea580c, #f97316); border: none;" onclick="triggerForceSeed()">
+                    🔄 Khôi phục & Gieo dữ liệu thực tế
+                </button>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">
                 <div class="card-title">⚙️ Cài đặt hệ thống</div>
@@ -697,12 +716,12 @@
     <div class="modal-box">
         <div class="modal-header"><div class="modal-title">👤 Tạo tài khoản</div><button class="modal-close" onclick="closeModal('createUserModal')">✖</button></div>
         <div class="modal-body">
-            <div class="form-group"><label>Tên đăng nhập</label><input id="newUsername" type="text" class="form-input"></div>
-            <div class="form-group"><label>Mật khẩu</label><input id="newPassword" type="password" class="form-input" value="123"></div>
-            <div class="form-group"><label>Họ và tên</label><input id="newFullName" type="text" class="form-input"></div>
-            <div class="form-group"><label>Mã nhân viên</label><input id="newEmployeeCode" class="form-input" placeholder="VD: NV1001"></div>
-            <div class="form-group"><label>Email</label><input id="newEmail" type="email" class="form-input" placeholder="VD: nv@example.com"></div>
-            <div class="form-group"><label>Phòng ban</label><select id="newDepartment" class="form-input"></select></div>
+            <div class="form-group"><label>Tên đăng nhập</label><input id="newUsername" type="text" class="form-input" readonly placeholder="Tự động tạo theo Họ tên & Mã NV" style="background-color: #f1f5f9; cursor: not-allowed; opacity: 0.8;"></div>
+            <div class="form-group"><label>Mật khẩu</label><input id="newPassword" type="password" class="form-input" value="123456"></div>
+            <div class="form-group"><label>Họ và tên</label><input id="newFullName" type="text" class="form-input" oninput="onNewFullNameInput()"></div>
+            <div class="form-group"><label>Mã nhân viên</label><input id="newEmployeeCode" class="form-input" placeholder="VD: NV1001" oninput="onNewEmployeeCodeInput()"></div>
+            <div class="form-group"><label>Email</label><input id="newEmail" type="email" class="form-input" readonly placeholder="Tự động tạo theo Họ tên & Mã NV" style="background-color: #f1f5f9; cursor: not-allowed; opacity: 0.8;"></div>
+            <div class="form-group"><label>Phòng ban</label><select id="newDepartment" class="form-input" onchange="onNewDepartmentChange()"></select></div>
         </div>
         <div class="modal-footer"><button class="btn btn-primary" onclick="submitCreateUser()">👤 Tạo</button></div>
     </div>
@@ -847,6 +866,10 @@
                 <div style="font-size:12px; color: #64748b; margin-top:4px;">Kéo thả các mục từ Kho tài liệu vào Cấu trúc khóa học bên phải</div>
             </div>
             <div style="display:flex; gap:15px; align-items:center;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:12px; font-weight:600;">Lọc Mã môn:</span>
+                    <input id="builderCourseCodeFilter" type="text" class="form-input" style="width:140px; height:32px; padding:2px 8px; font-size:12px;" placeholder="Ví dụ: ITSEC101..." oninput="loadBuilderLibrary()">
+                </div>
                 <div style="display:flex; align-items:center; gap:8px;">
                     <span style="font-size:12px; font-weight:600;">Lọc Level:</span>
                     <select id="builderLevelFilter" class="form-input" style="width:120px; height:32px; padding:2px 8px;" onchange="loadBuilderLibrary()">
@@ -1180,6 +1203,11 @@
                 <div class="form-group"><label>Ngày bắt đầu</label><input id="editExamStartDateInput" type="date" class="form-input"></div>
                 <div class="form-group"><label>Ngày kết thúc</label><input id="editExamEndDateInput" type="date" class="form-input"></div>
             </div>
+            <div style="margin-top: 15px; border-top: 1px dashed #cbd5e1; padding-top: 15px;">
+                <button type="button" class="btn btn-secondary" style="width:100%; border:1px solid #cbd5e1; height: 38px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; background: #f8fafc;" onclick="closeModal('editExamModal'); openExamQuestionsManagementModal(document.getElementById('editExamId').value);">
+                    ⚙️ Xem & Thiết kế câu hỏi Quiz
+                </button>
+            </div>
         </div>
         <div class="modal-footer"><button class="btn btn-primary" onclick="submitEditExam()">💾 Lưu</button></div>
     </div>
@@ -1459,4 +1487,63 @@
 
 @section Scripts {
 <script src="~/js/it-dashboard.js?v=@DateTime.Now.Ticks"></script>
+<script>
+    async function triggerForceSeed() {
+        const result = await Swal.fire({
+            title: 'Xác nhận gieo dữ liệu?',
+            text: 'Toàn bộ dữ liệu kiểm thử hiện tại sẽ bị xóa sạch hoàn toàn để thiết lập dữ liệu thực tế mới. Hành động này không thể hoàn tác!',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Đồng ý, gieo dữ liệu!',
+            cancelButtonText: 'Hủy bỏ',
+            customClass: {
+                confirmButton: 'btn btn-danger',
+                cancelButton: 'btn btn-secondary'
+            }
+        });
+
+        if (!result.isConfirmed) return;
+
+        Swal.fire({
+            title: 'Đang gieo dữ liệu...',
+            text: 'Vui lòng chờ trong giây lát.',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        try {
+            const response = await fetch('/api/it/force-seed', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+            if (response.ok && data.success) {
+                await Swal.fire({
+                    title: 'Thành công!',
+                    text: 'Đã gieo dữ liệu thực tế thành công. Hệ thống sẽ tự động tải lại trang.',
+                    icon: 'success'
+                });
+                location.reload();
+            } else {
+                Swal.fire({
+                    title: 'Thất bại!',
+                    text: data.error || 'Đã có lỗi xảy ra khi gieo dữ liệu.',
+                    icon: 'error'
+                });
+            }
+        } catch (err) {
+            console.error(err);
+            Swal.fire({
+                title: 'Lỗi kết nối!',
+                text: 'Không thể kết nối tới server.',
+                icon: 'error'
+            });
+        }
+    }
+</script>
 }
