@@ -14,6 +14,7 @@ let currentUserPermissionKeys = new Set();
 let documentLibraryData = { courses: [], modules: [], lessons: [], exams: [] };
 let currentLibraryTab = 'modules';
 let lastGeneratedQuestions = [];
+let isLessonVideoDeleted = false;
 
 const pagePermissionMap = {
     overview: 'dashboard.view',
@@ -1910,14 +1911,18 @@ async function submitLesson() {
         formData.append('contentBody', document.getElementById('lessonBodyInput').value);
     }
 
-    // Attachments (from the new section)
-    const docFile = document.getElementById('lessonDocFileInput').files[0];
-    const docLink = document.getElementById('lessonExternalDocLinkInput').value.trim();
-    if (docFile) formData.append('attachmentFile', docFile);
-    if (docLink) formData.append('attachmentUrl', docLink);
-
     try {
-        await apiFetch(`/api/it/modules/${moduleId}/lessons`, { method: 'POST', body: formData, isFormData: true });
+        const res = await apiFetch(`/api/it/modules/${moduleId}/lessons`, { method: 'POST', body: formData, isFormData: true });
+        
+        // Tải tài liệu và liên kết bổ sung
+        await uploadLessonAssets(res.id, 'lessonDocFileInput', 'lessonExternalDocLinkInput');
+        
+        // Reset inputs
+        document.getElementById('lessonDocFileInput').value = '';
+        document.getElementById('lessonExternalDocLinkInput').value = '';
+        document.getElementById('lessonVideoFileInput').value = '';
+        document.getElementById('lessonVideoLinkInput').value = '';
+
         closeModal('lessonModal');
         showToast('Thêm bài giảng thành công!');
         loadCourseContent();
@@ -1947,6 +1952,8 @@ async function openEditLessonModal(id) {
         if (videoLabelEl) videoLabelEl.style.display = 'none';
         if (docLabelEl) docLabelEl.style.display = 'none';
 
+        isLessonVideoDeleted = false;
+
         if (lesson.contentType === 'Video' || lesson.contentType === 'Document') {
             switchLessonSource('video', 'edit');
             if (lesson.videoUrl) {
@@ -1955,7 +1962,7 @@ async function openEditLessonModal(id) {
                     const fileName = lesson.videoUrl.split('/').pop();
                     const nameEl = document.getElementById('currentLessonVideoName');
                     if (nameEl) nameEl.textContent = fileName;
-                    if (videoLabelEl) videoLabelEl.style.display = 'block';
+                    if (videoLabelEl) videoLabelEl.style.display = 'flex';
                 } else {
                     if (videoLinkEl) videoLinkEl.value = lesson.videoUrl;
                 }
@@ -1966,8 +1973,26 @@ async function openEditLessonModal(id) {
             if (bodyEl) bodyEl.value = lesson.contentBody || '';
         }
         
-        // Handle attachments in the supporting section if needed
-        // (For now we just let them add new ones, but we could list existing ones)
+        // Hiển thị danh sách tài liệu đính kèm hiện tại
+        const attachmentsContainer = document.getElementById('editLessonAttachmentsContainer');
+        const attachmentsList = document.getElementById('editLessonAttachmentsList');
+        if (attachmentsContainer && attachmentsList) {
+            attachmentsList.innerHTML = '';
+            if (lesson.attachments && lesson.attachments.length > 0) {
+                attachmentsContainer.style.display = 'block';
+                lesson.attachments.forEach(att => {
+                    const fileName = att.fileName || att.filePath.split('/').pop();
+                    attachmentsList.innerHTML += `
+                        <div style="display:flex; align-items:center; justify-content:space-between; padding:6px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; font-size:12px;">
+                            <span style="color:#0f172a; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:280px;" title="${fileName}">📄 ${fileName}</span>
+                            <button type="button" class="btn btn-sm" style="padding:2px 6px; border:none; background:transparent; color:#ef4444; font-weight:bold; cursor:pointer;" onclick="deleteAttachment(${att.attachmentId}, ${lesson.lessonId})">🗑️ Xóa</button>
+                        </div>
+                    `;
+                });
+            } else {
+                attachmentsContainer.style.display = 'none';
+            }
+        }
         
         openModal('editLessonModal');
     } catch(e) { showToast(e.message, 'error'); }
@@ -1987,26 +2012,84 @@ async function submitEditLesson() {
         formData.append('contentType', 'Video');
         const link = document.getElementById('editLessonVideoLinkInput').value.trim();
         const file = document.getElementById('editLessonVideoFileInput').files[0];
-        if (file) formData.append('videoFile', file);
-        if (link) formData.append('videoUrl', link);
+        if (file) {
+            formData.append('videoFile', file);
+        } else if (isLessonVideoDeleted || link === '') {
+            formData.append('videoUrl', ''); // Gửi chuỗi rỗng để xóa link/file video
+        } else {
+            formData.append('videoUrl', link);
+        }
     } else if (source === 'ai') {
         formData.append('contentType', 'Text');
         formData.append('contentBody', document.getElementById('editLessonBodyInput').value);
     }
 
-    // Supporting Documents (Attachments)
-    const docFile = document.getElementById('editLessonDocFileInput').files[0];
-    const docLink = document.getElementById('editLessonExternalDocLinkInput').value.trim();
-    if (docFile) formData.append('attachmentFile', docFile);
-    if (docLink) formData.append('attachmentUrl', docLink);
-
     try {
         await apiFetch(`/api/it/lessons/${id}`, { method: 'PUT', body: formData, isFormData: true });
+        
+        // Tải tài liệu đính kèm mới lên
+        await uploadLessonAssets(id, 'editLessonDocFileInput', 'editLessonExternalDocLinkInput');
+        
+        // Reset các trường
+        document.getElementById('editLessonDocFileInput').value = '';
+        document.getElementById('editLessonExternalDocLinkInput').value = '';
+        document.getElementById('editLessonVideoFileInput').value = '';
+        document.getElementById('editLessonVideoLinkInput').value = '';
+
         closeModal('editLessonModal');
         showToast('Cập nhật bài giảng thành công!');
         loadCourseContent();
         await loadDocumentLibrary();
     } catch (e) { showToast(e.message, 'error'); }
+}
+
+function deleteCurrentLessonVideo() {
+    if (!confirm('Bạn có chắc chắn muốn xóa video hiện tại?')) return;
+    isLessonVideoDeleted = true;
+    const videoLabelEl = document.getElementById('currentLessonVideoLabel');
+    if (videoLabelEl) videoLabelEl.style.display = 'none';
+    const videoFileInput = document.getElementById('editLessonVideoFileInput');
+    if (videoFileInput) videoFileInput.value = '';
+    const videoLinkInput = document.getElementById('editLessonVideoLinkInput');
+    if (videoLinkInput) videoLinkInput.value = '';
+    showToast('Đã đánh dấu xóa video hiện tại. Nhấn Lưu để áp dụng.', 'warning');
+}
+
+async function deleteAttachment(id, lessonId) {
+    if (!confirm('Bạn có chắc chắn muốn xóa tài liệu đính kèm này?')) return;
+    try {
+        await apiFetch(`/api/it/attachments/${id}`, { method: 'DELETE' });
+        showToast('Đã xóa tài liệu đính kèm!');
+        
+        // Cập nhật lại dữ liệu thư viện
+        await loadDocumentLibrary();
+        
+        // Tải lại danh sách tài liệu trong modal sửa bài học
+        const lesson = documentLibraryData.lessons.find(l => l.lessonId == lessonId);
+        if (lesson) {
+            const attachmentsContainer = document.getElementById('editLessonAttachmentsContainer');
+            const attachmentsList = document.getElementById('editLessonAttachmentsList');
+            if (attachmentsContainer && attachmentsList) {
+                attachmentsList.innerHTML = '';
+                if (lesson.attachments && lesson.attachments.length > 0) {
+                    attachmentsContainer.style.display = 'block';
+                    lesson.attachments.forEach(att => {
+                        const fileName = att.fileName || att.filePath.split('/').pop();
+                        attachmentsList.innerHTML += `
+                            <div style="display:flex; align-items:center; justify-content:space-between; padding:6px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; font-size:12px;">
+                                <span style="color:#0f172a; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:280px;" title="${fileName}">📄 ${fileName}</span>
+                                <button type="button" class="btn btn-sm" style="padding:2px 6px; border:none; background:transparent; color:#ef4444; font-weight:bold; cursor:pointer;" onclick="deleteAttachment(${att.attachmentId}, ${lessonId})">🗑️ Xóa</button>
+                            </div>
+                        `;
+                    });
+                } else {
+                    attachmentsContainer.style.display = 'none';
+                }
+            }
+        }
+    } catch (e) {
+        showToast('Lỗi khi xóa tài liệu: ' + e.message, 'error');
+    }
 }
 
 async function openExamModal() {

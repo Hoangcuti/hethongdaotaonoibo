@@ -1275,7 +1275,7 @@ table.lms-table {
   position: fixed;
   right: 24px;
   bottom: 24px;
-  z-index: 200;
+  z-index: 999999 !important;
   display: grid;
   gap: 10px;
 }

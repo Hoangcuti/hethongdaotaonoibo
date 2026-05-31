@@ -10,9 +10,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@courseTitle - LMS</title>
-    <link rel="stylesheet" href="~/css/dashboard.css" />
+    <link rel="stylesheet" href="~/css/dashboard.css" asp-append-version="true" />
     <script src="https://www.youtube.com/iframe_api"></script>
-    <script src="~/js/app.js"></script>
+    <script src="~/js/app.js" asp-append-version="true"></script>
     <style>
         :root {
             --brand: var(--color-primary);
@@ -343,9 +343,16 @@
     <main class="main">
         <div class="hero">
             <section class="glass-card viewer">
-                <div class="viewer-header">
-                    <span id="contentBadge" class="status-badge" style="background: var(--brand); color: #fff; font-size: 10px; font-weight: 800; text-transform: uppercase;">LOADING</span>
-                    <h1 id="contentTitle" style="margin: 12px 0 0; font-size: 24px; font-weight: 800; letter-spacing: -0.01em;">Chọn bài học</h1>
+                <div class="viewer-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <span id="contentBadge" class="status-badge" style="background: var(--brand); color: #fff; font-size: 10px; font-weight: 800; text-transform: uppercase;">LOADING</span>
+                        <h1 id="contentTitle" style="margin: 12px 0 0; font-size: 24px; font-weight: 800; letter-spacing: -0.01em;">Chọn bài học</h1>
+                    </div>
+                    <!-- Toggle Video/Doc -->
+                    <div id="videoDocToggle" style="display:none; gap: 4px; background: rgba(99,102,241,0.05); padding: 4px; border-radius: 12px; border: 1px solid rgba(99,102,241,0.1);">
+                        <button type="button" class="btn" id="btnShowVideo" onclick="switchVideoDocMode('video')" style="padding: 6px 16px; font-size: 12px; font-weight: 800; border-radius: 8px; border:0; cursor:pointer; background: linear-gradient(135deg, var(--brand), var(--brand-dark)); color:#fff; box-shadow: 0 4px 10px rgba(99,102,241,0.2);">🎥 Video bài giảng</button>
+                        <button type="button" class="btn" id="btnShowDoc" onclick="switchVideoDocMode('doc')" style="padding: 6px 16px; font-size: 12px; font-weight: 800; border-radius: 8px; border:0; cursor:pointer; background:transparent; color:var(--muted); box-shadow:none;">🔗 Xem Tài liệu</button>
+                    </div>
                 </div>
                 <div class="viewer-body" id="contentHost">
                     <div style="text-align:center; padding: 40px; color: var(--muted)">Vui lòng chọn bài học từ thanh điều hướng để bắt đầu.</div>
@@ -630,7 +637,72 @@ function updateVideoProgressUI(pct) {
     }
 }
 
-function playLesson(id) {
+function getGoogleDriveDownloadUrl(url) {
+    if (!url) return null;
+    let fileId = '';
+    if (url.includes('/file/d/')) {
+        const parts = url.split('/file/d/');
+        if (parts.length > 1) {
+            fileId = parts[1].split('/')[0].split('?')[0];
+        }
+    } else if (url.includes('?id=') || url.includes('&id=')) {
+        const parts = url.split(/[?&]id=/);
+        if (parts.length > 1) {
+            fileId = parts[1].split('&')[0];
+        }
+    }
+    if (fileId) {
+        return `https://drive.google.com/uc?export=download&id=${fileId}`;
+    }
+    return url;
+}
+
+function triggerDownload(filePath, attachmentId) {
+    if (!filePath) return;
+    const isGDrive = filePath.includes('drive.google.com');
+    const isExternal = filePath.startsWith('http') && !isGDrive;
+    
+    if (isExternal) {
+        // Nếu là link ngoài không phải Drive thì mở tab mới
+        window.open(filePath, '_blank');
+    } else if (isGDrive) {
+        // Nếu là link Drive, mở ở tab mới thông qua download URL để giữ nguyên tab học LMS
+        const downloadUrl = getGoogleDriveDownloadUrl(filePath);
+        window.open(downloadUrl, '_blank');
+    } else {
+        // Nếu là tệp tin cục bộ, sử dụng endpoint download của controller để ép trình duyệt tải về trực tiếp
+        const downloadUrl = attachmentId ? `/Student/DownloadAttachment/${attachmentId}` : filePath;
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.setAttribute('download', '');
+        link.setAttribute('target', '_blank');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+}
+
+function getGoogleDriveEmbedUrl(url) {
+    if (!url) return null;
+    let fileId = '';
+    if (url.includes('/file/d/')) {
+        const parts = url.split('/file/d/');
+        if (parts.length > 1) {
+            fileId = parts[1].split('/')[0].split('?')[0];
+        }
+    } else if (url.includes('?id=') || url.includes('&id=')) {
+        const parts = url.split(/[?&]id=/);
+        if (parts.length > 1) {
+            fileId = parts[1].split('&')[0];
+        }
+    }
+    if (fileId) {
+        return `https://drive.google.com/file/d/${fileId}/preview`;
+    }
+    return null;
+}
+
+async function playLesson(id) {
     currentLessonId = id;
     renderSidebar();
     const lesson = flatLessons.find(l => l.lessonId === id);
@@ -672,8 +744,16 @@ function playLesson(id) {
     document.getElementById('contentTitle').textContent = lesson.title || 'Bài học';
     const host = document.getElementById('contentHost');
     
+    const hasVideo = lesson.contentType === 'Video' && lesson.videoUrl;
+    const isGDriveVideo = hasVideo && lesson.videoUrl.includes('drive.google.com');
+
     const btn = document.getElementById('btnComplete');
-    if (!lesson.isCompleted) {
+    if (isGDriveVideo) {
+        // Đối với video Google Drive, không thể track tiến độ xem qua iframe nên cho phép hoàn thành ngay lập tức
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.innerHTML = lesson.isCompleted ? 'Tiếp tục bài tiếp →' : 'Hoàn thành bài giảng';
+    } else if (!lesson.isCompleted) {
         btn.disabled = true;
         btn.style.opacity = '0.5';
         btn.innerHTML = 'Hãy xem đủ 90% video';
@@ -683,8 +763,94 @@ function playLesson(id) {
         btn.innerHTML = 'Tiếp tục bài tiếp →';
     }
 
-    if (lesson.contentType === 'Video' && lesson.videoUrl) {
+    // Tải danh sách tài liệu đính kèm bất đồng bộ
+    let attachments = [];
+    try {
+        attachments = await apiFetch(`/api/student/lessons/${id}/attachments`);
+    } catch (e) {
+        console.error("Lỗi tải tài liệu:", e);
+    }
+
+    const toggleEl = document.getElementById('videoDocToggle');
+
+    // Tạo HTML danh sách tài liệu đính kèm định dạng premium
+    let docListHtml = '';
+    if (attachments.length > 0) {
+        docListHtml = attachments.map(a => {
+            const isGDrive = String(a.filePath || '').includes('drive.google.com');
+            const isExternal = String(a.filePath || '').startsWith('http');
+            const btnText = isGDrive ? 'Tải xuống (Drive) 📥' : (isExternal ? 'Mở liên kết ↗' : 'Tải xuống tài liệu 📥');
+            const icon = isExternal ? '🔗' : '📄';
+            return `
+                <div class="attach-item" style="cursor: pointer; border: 1px solid var(--line); border-radius:16px; padding:16px; background:#fff; display:flex; align-items:center; justify-content:space-between; transition:all 0.3s; margin-bottom:12px;" onclick="triggerDownload('${escapeJs(a.filePath)}', ${a.attachmentId})">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <span style="font-size:32px;">${icon}</span>
+                        <div style="text-align:left;">
+                            <div style="font-weight:700; color:var(--ink); font-size:14px;">${escapeHtml(a.fileName || 'Tài liệu')}</div>
+                            <div style="font-size:11px; color:var(--muted); margin-top:2px; word-break:break-all;">${escapeHtml(a.filePath)}</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-soft" style="padding:8px 16px; font-size:12px; border-radius:12px;" onclick="event.stopPropagation(); triggerDownload('${escapeJs(a.filePath)}', ${a.attachmentId})">${btnText}</button>
+                </div>
+            `;
+        }).join('');
+    }
+
+    if (hasVideo) {
+        // Cho hiển thị thanh chuyển đổi nếu có tài liệu đi kèm
+        if (toggleEl) {
+            if (attachments.length > 0) {
+                toggleEl.style.display = 'flex';
+                // Reset nút toggle về trạng thái xem video
+                const btnVideo = document.getElementById('btnShowVideo');
+                const btnDoc = document.getElementById('btnShowDoc');
+                if (btnVideo) {
+                    btnVideo.style.background = 'linear-gradient(135deg, var(--brand), var(--brand-dark))';
+                    btnVideo.style.color = '#fff';
+                    btnVideo.style.boxShadow = '0 4px 10px rgba(99,102,241,0.2)';
+                }
+                if (btnDoc) {
+                    btnDoc.style.background = 'transparent';
+                    btnDoc.style.color = 'var(--muted)';
+                    btnDoc.style.boxShadow = 'none';
+                }
+            } else {
+                toggleEl.style.display = 'none';
+            }
+        }
+
+        // Render cấu trúc video player (Hỗ trợ Youtube, Google Drive Video và tệp tin MP4 upload)
+        let playerHtml = '';
         const isYT = lesson.videoUrl.includes('youtube.com') || lesson.videoUrl.includes('youtu.be');
+        const driveEmbed = isGDriveVideo ? getGoogleDriveEmbedUrl(lesson.videoUrl) : null;
+
+        if (isYT) {
+            playerHtml = `<div id="ytPlayerHost" style="border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.3)"></div>`;
+        } else if (driveEmbed) {
+            playerHtml = `<iframe src="${driveEmbed}" width="100%" height="480" style="border-radius:12px; border:none; box-shadow:0 10px 30px rgba(0,0,0,0.3);" allow="autoplay" allowfullscreen></iframe>`;
+        } else {
+            playerHtml = `<video id="nativeVideo" controls style="width:100%; height:auto; max-height:480px; background:#000; border-radius:12px;">
+                                <source src="${lesson.videoUrl}" type="video/mp4">
+                              </video>`;
+        }
+
+        // Ghép hai khu vực xem
+        host.innerHTML = `
+            <div id="videoPlayerContainer">
+                ${playerHtml}
+                ${(lesson.contentBody && lesson.contentBody.trim() !== '') ? `<div class="doc" style="margin-top:24px; border-top:1px solid var(--line); padding-top:24px;">${lesson.contentBody}</div>` : ''}
+            </div>
+            ${attachments.length > 0 ? `
+            <div id="docAttachmentsContainer" style="display:none; padding:20px 0;">
+                <div style="margin-bottom:20px; font-size:14px; color:var(--muted); font-weight:600; text-align:left;">📁 TÀI LIỆU HỌC TẬP ĐÍNH KÈM:</div>
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                    ${docListHtml}
+                </div>
+            </div>
+            ` : ''}
+        `;
+
+        // Khởi tạo Tracking
         if (isYT) {
             let videoId = '';
             if (lesson.videoUrl.includes('v=')) {
@@ -694,11 +860,7 @@ function playLesson(id) {
             } else if (lesson.videoUrl.includes('embed/')) {
                 videoId = lesson.videoUrl.split('embed/')[1].split('?')[0];
             }
-            
-            host.innerHTML = `<div id="ytPlayerHost" style="border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.3)"></div>`;
-            if (lesson.contentBody && lesson.contentBody.trim() !== '') {
-                host.innerHTML += `<div class="doc" style="margin-top:24px; border-top:1px solid var(--line); padding-top:24px;">${lesson.contentBody}</div>`;
-            }
+
             videoTracker.ytPlayer = new YT.Player('ytPlayerHost', {
                 height: '480',
                 width: '100%',
@@ -718,7 +880,7 @@ function playLesson(id) {
                 if (videoTracker.ytPlayer && typeof videoTracker.ytPlayer.getCurrentTime === 'function') {
                     const curr = videoTracker.ytPlayer.getCurrentTime();
                     
-                    // Prevent seeking forward
+                    // Ngăn tua video quá tiến độ
                     if (curr > videoTracker.maxTime + 2.5) {
                         videoTracker.ytPlayer.seekTo(videoTracker.maxTime, true);
                         showToast('Bạn không thể xem nhanh qua phần chưa học!', 'warning');
@@ -732,74 +894,81 @@ function playLesson(id) {
                     }
                 }
             }, 2000);
-        } else {
-            host.innerHTML = `<video id="nativeVideo" controls style="width:100%; height:auto; max-height:480px; background:#000; border-radius:12px;">
-                                <source src="${lesson.videoUrl}" type="video/mp4">
-                              </video>`;
-            if (lesson.contentBody && lesson.contentBody.trim() !== '') {
-                host.innerHTML += `<div class="doc" style="margin-top:24px; border-top:1px solid var(--line); padding-top:24px;">${lesson.contentBody}</div>`;
-            }
+        } else if (!driveEmbed) {
             const video = document.getElementById('nativeVideo');
-            
-            video.oncanplay = () => {
-                if (videoTracker.lastTime > 2 && video.currentTime < videoTracker.lastTime - 1) {
-                    video.currentTime = videoTracker.lastTime;
-                }
-            };
+            if (video) {
+                video.oncanplay = () => {
+                    if (videoTracker.lastTime > 2 && video.currentTime < videoTracker.lastTime - 1) {
+                        video.currentTime = videoTracker.lastTime;
+                    }
+                };
 
-            video.onloadedmetadata = () => { 
-                videoTracker.duration = video.duration;
-            };
+                video.onloadedmetadata = () => { 
+                    videoTracker.duration = video.duration;
+                };
 
-            video.ontimeupdate = () => { 
-                const delta = video.currentTime - videoTracker.lastTime;
-                
-                // Detect illegal jump forward (more than 2 seconds skip)
-                if (delta > 2) {
-                    video.currentTime = videoTracker.maxTime;
-                    showToast('Bạn không thể xem nhanh qua phần chưa học!', 'warning');
-                    return;
-                }
+                video.ontimeupdate = () => { 
+                    const delta = video.currentTime - videoTracker.lastTime;
+                    
+                    if (delta > 2) {
+                        video.currentTime = videoTracker.maxTime;
+                        showToast('Bạn không thể xem nhanh qua phần chưa học!', 'warning');
+                        return;
+                    }
 
-                if (video.currentTime > videoTracker.maxTime) {
-                    // Only allow maxTime to grow if playing normally
-                    if (delta > 0 && delta <= 2) {
-                        videoTracker.maxTime = video.currentTime;
-                        handleVideoProgress(video.currentTime);
-                    } else if (delta > 2) {
+                    if (video.currentTime > videoTracker.maxTime) {
+                        if (delta > 0 && delta <= 2) {
+                            videoTracker.maxTime = video.currentTime;
+                            handleVideoProgress(video.currentTime);
+                        } else if (delta > 2) {
+                            video.currentTime = videoTracker.maxTime;
+                        }
+                    }
+                    
+                    videoTracker.lastTime = video.currentTime;
+                    
+                    if (video.currentTime > 0) {
+                        localStorage.setItem(progressKey, video.currentTime.toFixed(1));
+                    }
+                };
+
+                video.onseeking = () => {
+                    if (videoTracker.isSeekingCorrection) return;
+                    const allowedTime = videoTracker.maxTime;
+                    if (video.currentTime > allowedTime + 1) {
+                        videoTracker.isSeekingCorrection = true;
+                        video.currentTime = allowedTime;
+                        showToast('Bạn không thể xem nhanh qua phần chưa học!', 'warning');
+                    }
+                };
+                video.onseeked = () => { videoTracker.isSeekingCorrection = false; };
+                video.onplay = () => {
+                    if (video.currentTime > videoTracker.maxTime + 1.5) {
                         video.currentTime = videoTracker.maxTime;
                     }
-                }
-                
-                videoTracker.lastTime = video.currentTime;
-                
-                // Save frequently
-                if (video.currentTime > 0) {
-                    localStorage.setItem(progressKey, video.currentTime.toFixed(1));
-                }
-            };
-
-            video.onseeking = () => {
-                if (videoTracker.isSeekingCorrection) return;
-                const allowedTime = videoTracker.maxTime;
-                if (video.currentTime > allowedTime + 1) {
-                    videoTracker.isSeekingCorrection = true;
-                    video.currentTime = allowedTime;
-                    showToast('Bạn không thể xem nhanh qua phần chưa học!', 'warning');
-                }
-            };
-            video.onseeked = () => { videoTracker.isSeekingCorrection = false; };
-            video.onplay = () => {
-                if (video.currentTime > videoTracker.maxTime + 1.5) {
-                    video.currentTime = videoTracker.maxTime;
-                }
-            };
-            video.play();
+                };
+                video.play();
+            }
         }
+    } else if (attachments.length > 0) {
+        if (toggleEl) toggleEl.style.display = 'none';
+
+        // Hiển thị trực tiếp danh sách tài liệu nếu bài giảng không có video
+        host.innerHTML = `
+            <div style="padding: 20px 0; text-align:left;">
+                <div style="margin-bottom:20px; font-size:14px; color:var(--muted); font-weight:600;">📁 TÀI LIỆU HỌC TẬP ĐÍNH KÈM:</div>
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                    ${docListHtml}
+                </div>
+            </div>
+        `;
+        btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = 'Tiếp tục bài tiếp →';
     } else if (lesson.contentBody && lesson.contentBody.trim() !== '') {
+        if (toggleEl) toggleEl.style.display = 'none';
         host.innerHTML = `<div class="doc">${lesson.contentBody}</div>`;
         btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = 'Tiếp tục bài tiếp →';
     } else {
+        if (toggleEl) toggleEl.style.display = 'none';
         host.innerHTML = `<div class="doc" style="text-align:center; padding: 60px 40px; background: rgba(99,102,241,0.02); border: 2px dashed rgba(99,102,241,0.1); border-radius: 12px;">
             <div style="font-size: 48px; margin-bottom: 20px;">📚</div>
             <h3 style="margin-bottom:8px; color:var(--text);">Tài liệu học tập</h3>
@@ -821,9 +990,53 @@ function playLesson(id) {
         bPanel.style.display = 'block';
         bPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
-
+    
     if (bottomTab === 'attach') loadAttachments(id);
     else loadComments(id);
+}
+
+function switchVideoDocMode(mode) {
+    const btnVideo = document.getElementById('btnShowVideo');
+    const btnDoc = document.getElementById('btnShowDoc');
+    const videoContainer = document.getElementById('videoPlayerContainer');
+    const docContainer = document.getElementById('docAttachmentsContainer');
+
+    if (mode === 'video') {
+        if (btnVideo) {
+            btnVideo.style.background = 'linear-gradient(135deg, var(--brand), var(--brand-dark))';
+            btnVideo.style.color = '#fff';
+            btnVideo.style.boxShadow = '0 4px 10px rgba(99,102,241,0.2)';
+        }
+        if (btnDoc) {
+            btnDoc.style.background = 'transparent';
+            btnDoc.style.color = 'var(--muted)';
+            btnDoc.style.boxShadow = 'none';
+        }
+        if (videoContainer) videoContainer.style.display = 'block';
+        if (docContainer) docContainer.style.display = 'none';
+    } else {
+        if (btnVideo) {
+            btnVideo.style.background = 'transparent';
+            btnVideo.style.color = 'var(--muted)';
+            btnVideo.style.boxShadow = 'none';
+        }
+        if (btnDoc) {
+            btnDoc.style.background = 'linear-gradient(135deg, var(--brand), var(--brand-dark))';
+            btnDoc.style.color = '#fff';
+            btnDoc.style.boxShadow = '0 4px 10px rgba(99,102,241,0.2)';
+        }
+        if (videoContainer) videoContainer.style.display = 'none';
+        if (docContainer) docContainer.style.display = 'block';
+
+        // Tạm dừng trình phát video gốc
+        const nativeVid = document.getElementById('nativeVideo');
+        if (nativeVid) nativeVid.pause();
+        
+        // Tạm dừng video YouTube
+        if (videoTracker.ytPlayer && typeof videoTracker.ytPlayer.pauseVideo === 'function') {
+            try { videoTracker.ytPlayer.pauseVideo(); } catch(e) {}
+        }
+    }
 }
 
 function handleVideoProgress(currentTime) {
@@ -955,13 +1168,18 @@ async function loadAttachments(lessonId) {
             el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:24px;text-align:center">Bài học này chưa có tài liệu đính kèm.</div>';
             return;
         }
-        el.innerHTML = attachments.map(a => `
-            <div class="attach-item">
-                <span style="font-size:24px">📁</span>
-                <div style="flex:1"><div style="font-size:14px;font-weight:700">${escapeHtml(a.fileName || 'Tài liệu')}</div></div>
-                ${a.filePath ? `<a href="${escapeHtml(a.filePath)}" target="_blank" class="btn btn-soft" style="padding:10px 20px;font-size:12px;border-radius:12px">Tải xuống</a>` : ''}
-            </div>
-        `).join('');
+        el.innerHTML = attachments.map(a => {
+            const isGDrive = String(a.filePath || '').includes('drive.google.com');
+            const isExternal = String(a.filePath || '').startsWith('http');
+            const btnText = isGDrive ? 'Tải xuống (Drive) 📥' : (isExternal ? 'Mở liên kết ↗' : 'Tải xuống 📥');
+            return `
+                <div class="attach-item" style="cursor: pointer;" onclick="triggerDownload('${escapeJs(a.filePath)}', ${a.attachmentId})">
+                    <span style="font-size:24px">📁</span>
+                    <div style="flex:1"><div style="font-size:14px;font-weight:700">${escapeHtml(a.fileName || 'Tài liệu')}</div></div>
+                    ${a.filePath ? `<button class="btn btn-soft" style="padding:10px 20px;font-size:12px;border-radius:12px;" onclick="event.stopPropagation(); triggerDownload('${escapeJs(a.filePath)}', ${a.attachmentId})">${btnText}</button>` : ''}
+                </div>
+            `;
+        }).join('');
     } catch (e) {
         el.innerHTML = '<div style="color:#ef4444;font-size:13px">Lỗi tải dữ liệu.</div>';
     }

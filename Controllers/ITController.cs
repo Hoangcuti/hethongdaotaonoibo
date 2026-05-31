@@ -161,7 +161,13 @@ public class ITController : Controller
             lesson.ContentType = "Document";
             lesson.ContentBody = null;
         }
-        // Priority 3: URL Link (Video or Document)
+        // Priority 3: Explicit clear URL/Video action
+        else if (request.HasVideoUrlField && string.IsNullOrWhiteSpace(request.VideoUrl) && isUpdate)
+        {
+            DeleteUploadIfOwned(lesson.VideoUrl);
+            lesson.VideoUrl = null;
+        }
+        // Priority 4: URL Link (Video or Document)
         else if (hasVideoUrl)
         {
             DeleteUploadIfOwned(lesson.VideoUrl);
@@ -169,7 +175,7 @@ public class ITController : Controller
             lesson.ContentType = request.ContentType ?? "Video";
             lesson.ContentBody = null;
         }
-        // Priority 4: AI / Text Body
+        // Priority 5: AI / Text Body
         else if (hasContentBody)
         {
             DeleteUploadIfOwned(lesson.VideoUrl);
@@ -1831,10 +1837,12 @@ public class ITController : Controller
                 await _db.Lessons.AnyAsync(l => l.LessonId != lessonId && l.ModuleId == lesson.ModuleId && l.Title != null && l.Title.ToLower() == dto.Title.Trim().ToLower()))
                 return BadRequest(new { error = $"B?i h?c {dto.Title.Trim()} d? t?n t?i trong chuong n?y." });
 
-            if (IsVideoRequest(dto) && string.IsNullOrWhiteSpace(lesson.VideoUrl) && (dto.VideoFile == null || dto.VideoFile.Length == 0) && string.IsNullOrWhiteSpace(dto.VideoUrl))
-                return BadRequest(new { error = "Bai video can chon file video hoac nhap link video." });
+            bool isClearingVideo = dto.HasVideoUrlField && string.IsNullOrWhiteSpace(dto.VideoUrl) && (dto.VideoFile == null || dto.VideoFile.Length == 0);
+
+            if (IsVideoRequest(dto) && !isClearingVideo && string.IsNullOrWhiteSpace(lesson.VideoUrl) && (dto.VideoFile == null || dto.VideoFile.Length == 0) && string.IsNullOrWhiteSpace(dto.VideoUrl))
+                return BadRequest(new { error = "Bài video cần chọn file video hoặc nhập link video." });
             if (IsTextRequest(dto) && string.IsNullOrWhiteSpace(dto.ContentBody) && string.IsNullOrWhiteSpace(lesson.ContentBody))
-                return BadRequest(new { error = "Bai AI / van ban can co noi dung." });
+                return BadRequest(new { error = "Bài AI / văn bản cần có nội dung." });
 
             if (!string.IsNullOrWhiteSpace(dto.Title)) lesson.Title = dto.Title.Trim();
             if (dto.SortOrder.HasValue) lesson.SortOrder = dto.SortOrder.Value;

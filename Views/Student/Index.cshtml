@@ -12,6 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="~/css/dashboard.css" />
     <script src="~/js/app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         html, body { font-family: 'Manrope', sans-serif; }
         .student-main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow-y: auto; overflow-x: hidden; position: relative; }
@@ -205,6 +206,52 @@
         </div>
     </div>
     <script>
+        @if (TempData["ErrorMessage"] != null)
+        {
+            <text>
+            window.addEventListener('DOMContentLoaded', () => {
+                showToast('@Html.Raw(TempData["ErrorMessage"])', 'danger');
+            });
+            </text>
+        }
+
+        function renderDueDateInfo(dueDateStr, progress) {
+            if (!dueDateStr) return { html: '', isLocked: false };
+            
+            const dueDate = new Date(dueDateStr);
+            const now = new Date();
+            
+            const formattedDate = dueDate.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            let badgeHtml = '';
+            let isLocked = false;
+            
+            if (now > dueDate) {
+                if (progress < 100) {
+                    badgeHtml = `<span style="color: #ef4444; font-weight: 700;">⚠️ Đã quá hạn (Đã khóa) - Hạn: ${formattedDate}</span>`;
+                    isLocked = true;
+                } else {
+                    badgeHtml = `<span style="color: #10b981;">Hạn: ${formattedDate} (Hoàn thành)</span>`;
+                }
+            } else {
+                const diffMs = dueDate - now;
+                const diffMins = Math.ceil(diffMs / (1000 * 60));
+                const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
+                const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                
+                if (progress >= 100) {
+                    badgeHtml = `<span style="color: #10b981;">Hạn: ${formattedDate} (Hoàn thành)</span>`;
+                } else if (diffMins <= 60) {
+                    badgeHtml = `<span style="color: #f59e0b; font-weight: 700;">⚠️ Hết hạn sau ${diffMins} phút!</span>`;
+                } else if (diffHours <= 24) {
+                    badgeHtml = `<span style="color: #f59e0b; font-weight: 700;">⚠️ Hết hạn sau ${diffHours} giờ!</span>`;
+                } else {
+                    badgeHtml = `<span style="color: var(--text-secondary);">Hạn: ${formattedDate} (Còn ${diffDays} ngày)</span>`;
+                }
+            }
+            
+            return { html: `<div class="meta-line">${badgeHtml}</div>`, isLocked: isLocked };
+        }
+
         const pageConfig = {
             dashboard: { title: 'Dashboard', subtitle: 'Tổng quan tiến độ học tập, lịch học và thông báo cá nhân.' },
             courses: { title: 'Chương trình đào tạo', subtitle: 'Danh sách khóa học bạn có thể tham gia.' },
@@ -303,14 +350,22 @@
             ].join('');
 
             document.getElementById('recentCoursesWrap').innerHTML = (dashboard.recentCourses?.length ?? 0)
-                ? dashboard.recentCourses.map(c => `
+                ? dashboard.recentCourses.map(c => {
+                    const dueInfo = renderDueDateInfo(c.dueDate, c.progress);
+                    const btnHtml = dueInfo.isLocked
+                        ? `<button class="btn btn-danger btn-sm" type="button" onclick="requestExtension(${c.courseId}, '${escapeHtml(c.title)}')">Xin gia hạn</button>`
+                        : `<a class="btn btn-primary btn-sm" href="/Student/Learn/${c.courseId}">Tiếp tục học</a>`;
+                    
+                    return `
                     <div class="course-card">
                         <h3>${escapeHtml(c.title || 'Khóa học')}</h3>
                         <div class="meta-line">${statusBadge(c.status || 'NotStarted')}</div>
                         <div class="meta-line">Ngày ghi danh: ${fmtDate(c.enrollDate)}</div>
+                        ${dueInfo.html}
                         <div style="margin-top:12px">${progressBar(c.progress || 0)}</div>
-                        <div class="card-actions"><a class="btn btn-primary btn-sm" href="/Student/Learn/${c.courseId}">Tiếp tục học</a></div>
-                    </div>`).join('')
+                        <div class="card-actions">${btnHtml}</div>
+                    </div>`;
+                }).join('')
                 : renderEmpty('Bạn chưa có khóa học nào được ghi danh.');
 
             document.getElementById('dashboardNotifications').innerHTML = (notifications.notifications?.length ?? 0)
@@ -334,32 +389,66 @@
         }
 
         function renderCourseCard(course) {
+            const dueInfo = renderDueDateInfo(course.dueDate, course.progress);
+            let btnHtml = '';
+            if (dueInfo.isLocked) {
+                btnHtml = `<button class="btn btn-danger btn-sm" type="button" onclick="requestExtension(${course.courseId}, '${escapeHtml(course.title)}')">Xin gia hạn</button>`;
+            } else {
+                btnHtml = course.enrolled 
+                    ? `<a class="btn btn-primary btn-sm" href="/Student/Learn/${course.courseId}">Vào học</a>` 
+                    : `<button class="btn btn-primary btn-sm" type="button" onclick="confirmEnroll(${course.courseId})">Ghi danh</button>`;
+            }
             return `
                 <div class="course-card">
                     <h3>${escapeHtml(course.title || 'Khóa học')}</h3>
                     <div class="meta-line">Danh mục: ${escapeHtml(course.category || 'Chưa phân loại')}</div>
                     <div class="meta-line">Quiz: ${fmtNumber(course.quizCount || 0)} | ${course.isMandatory ? 'Bắt buộc' : 'Tự chọn'}</div>
+                    ${dueInfo.html}
                     <div style="margin-top:12px">${progressBar(course.progress || 0)}</div>
                     <div class="card-actions">
                         <button class="btn btn-secondary btn-sm" type="button" onclick="openCourseDetail(${course.courseId})">Xem chi tiết</button>
-                        ${course.enrolled ? `<a class="btn btn-primary btn-sm" href="/Student/Learn/${course.courseId}">Vào học</a>` : `<button class="btn btn-primary btn-sm" type="button" onclick="confirmEnroll(${course.courseId})">Ghi danh</button>`}
+                        ${btnHtml}
                     </div>
                 </div>`;
         }
 
         async function openCourseDetail(courseId) {
             const data = await apiFetch(`/api/student/courses/${courseId}`);
+            const dueInfo = renderDueDateInfo(data.dueDate, data.progress);
+            
             document.getElementById('courseModalTitle').textContent = data.title || 'Chi tiết khóa học';
             document.getElementById('courseModalSub').textContent = `Danh mục: ${data.category || 'Chung'}`;
+            
+            let dueDetailHtml = dueInfo.html ? `<div class="info-item"><div class="meta-line">Hạn hoàn thành</div><div><strong>${dueInfo.html}</strong></div></div>` : '';
+            
             document.getElementById('courseDetailWrap').innerHTML = `
                 <div class="info-item"><div class="meta-line">Mô tả</div><div><strong>${escapeHtml(data.description || 'Chưa có mô tả')}</strong></div></div>
+                ${dueDetailHtml}
                 <div class="info-item"><div class="meta-line">Số chương</div><div><strong>${fmtNumber(data.totalModules || 0)}</strong></div></div>
                 <div class="info-item"><div class="meta-line">Số bài học</div><div><strong>${fmtNumber(data.totalLessons || 0)}</strong></div></div>
                 <div class="info-item"><div class="meta-line">Số bài kiểm tra</div><div><strong>${fmtNumber(data.totalQuizzes || 0)}</strong></div></div>`;
+            
             const action = document.getElementById('courseModalAction');
             action.style.display = '';
-            action.textContent = data.enrolled ? 'Vào học ngay' : 'Ghi danh khóa học';
-            action.onclick = () => data.enrolled ? window.location.href = `/Student/Learn/${data.courseId}` : confirmEnroll(data.courseId, true);
+            
+            if (dueInfo.isLocked) {
+                action.className = 'btn btn-danger';
+                action.disabled = false;
+                action.style.opacity = '';
+                action.style.cursor = '';
+                action.textContent = 'Xin gia hạn';
+                action.onclick = () => {
+                    closeModal('courseDetailModal');
+                    requestExtension(data.courseId, data.title);
+                };
+            } else {
+                action.className = 'btn btn-primary';
+                action.disabled = false;
+                action.style.opacity = '';
+                action.style.cursor = '';
+                action.textContent = data.enrolled ? 'Vào học ngay' : 'Ghi danh khóa học';
+                action.onclick = () => data.enrolled ? window.location.href = `/Student/Learn/${data.courseId}` : confirmEnroll(data.courseId, true);
+            }
             openModal('courseDetailModal');
         }
 
@@ -754,6 +843,38 @@
             document.getElementById('newPassword').value = '';
             document.getElementById('confirmPassword').value = '';
             showToast('Đổi mật khẩu thành công.');
+        }
+
+        async function requestExtension(courseId, title) {
+            const { value: reason } = await Swal.fire({
+                title: 'Xin gia hạn khóa học',
+                html: `Nhập lý do hợp lý xin gia hạn khóa học:<br/><strong>${title}</strong>`,
+                input: 'textarea',
+                inputPlaceholder: 'Lý do xin gia hạn...',
+                showCancelButton: true,
+                confirmButtonText: 'Gửi yêu cầu',
+                cancelButtonText: 'Hủy',
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'Bạn phải nhập lý do!';
+                    }
+                }
+            });
+            
+            if (reason) {
+                try {
+                    await apiFetch(`/api/student/courses/${courseId}/request-extension`, {
+                        method: 'POST',
+                        body: JSON.stringify({ reason: reason.trim() })
+                    });
+                    showToast('Đã gửi yêu cầu gia hạn đến Trưởng phòng thành công!', 'success');
+                    await loadCourses();
+                    await loadMyCourses();
+                    await loadDashboard();
+                } catch (e) {
+                    showToast('Lỗi khi gửi yêu cầu: ' + e.message, 'danger');
+                }
+            }
         }
 
         document.addEventListener('DOMContentLoaded', () => {

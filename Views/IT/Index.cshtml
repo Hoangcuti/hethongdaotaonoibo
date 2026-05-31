@@ -1161,11 +1161,18 @@
                         <input id="editLessonExternalDocLinkInput" type="text" class="form-input" placeholder="Google Drive, PDF..." style="font-size:12px;">
                     </div>
                 </div>
+                <div id="editLessonAttachmentsContainer" style="margin-top: 10px; display: none; padding: 10px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">
+                    <label style="font-size:11px; font-weight:600; color:#64748b; display:block; margin-bottom:6px;">Tài liệu đã đính kèm:</label>
+                    <div id="editLessonAttachmentsList" style="display:flex; flex-direction:column; gap:6px;"></div>
+                </div>
             </div>
 
             <div id="editLessonSourceVideo" class="edit-lesson-source-section">
-                <div id="currentLessonVideoLabel" style="font-size:12px; color:#10b981; margin-bottom:8px; display:none; padding:8px; background:rgba(16,185,129,0.05); border-radius:6px; border:1px solid rgba(16,185,129,0.2)">
-                    <span>📄 <strong>Hiện tại:</strong> </span><span id="currentLessonVideoName"></span>
+                <div id="currentLessonVideoLabel" style="font-size:12px; color:#10b981; margin-bottom:8px; display:none; padding:8px; background:rgba(16,185,129,0.05); border-radius:6px; border:1px solid rgba(16,185,129,0.2); justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:4px;">
+                        <span>📄 <strong>Hiện tại:</strong> </span><span id="currentLessonVideoName"></span>
+                    </div>
+                    <button type="button" class="btn btn-sm" style="padding:2px 8px; font-size:11px; border:none; background:#fef2f2; color:#ef4444; border-radius:4px; font-weight:600; cursor:pointer;" onclick="deleteCurrentLessonVideo()">🗑️ Xóa video</button>
                 </div>
                 <div class="form-group"><label>Thay đổi Video (Nếu cần)</label><input id="editLessonVideoFileInput" type="file" class="form-input" style="padding:10px" accept="video/*"><div style="margin:8px 0; text-align:center; color:#94a3b8; font-size:12px;">hoặc</div><input id="editLessonVideoLinkInput" type="text" class="form-input" placeholder="Dán link video Youtube / MP4 trực tiếp"></div>
             </div>

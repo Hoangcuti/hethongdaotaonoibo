@@ -2,8 +2,8 @@ using System.Text.Json;
 using KhoaHoc.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Hosting;
 
 namespace KhoaHoc.Controllers;
 
@@ -14,12 +14,14 @@ public class StudentController : Controller
     private readonly CorporateLmsProContext _db;
     private readonly KhoaHoc.Services.IAIService _aiService;
     private readonly ILogger<StudentController> _logger;
+    private readonly IWebHostEnvironment _env;
 
-    public StudentController(CorporateLmsProContext db, KhoaHoc.Services.IAIService aiService, ILogger<StudentController> logger)
+    public StudentController(CorporateLmsProContext db, KhoaHoc.Services.IAIService aiService, ILogger<StudentController> logger, IWebHostEnvironment env)
     {
         _db = db;
         _aiService = aiService;
         _logger = logger;
+        _env = env;
     }
 
     private int? GetCurrentUserId()
@@ -79,6 +81,65 @@ public class StudentController : Controller
                 return Unauthorized();
             }
 
+            try
+            {
+                // Quét các khóa học quá hạn mà học viên chưa hoàn thành để gửi thông báo cho Trưởng phòng
+                var overdueAssignments = await _db.TrainingAssignments
+                    .Include(ta => ta.Course)
+                    .Include(ta => ta.User)
+                    .Where(ta => ta.UserId == userId && ta.DueDate.HasValue && ta.DueDate.Value < DateTime.Now)
+                    .ToListAsync();
+
+                if (overdueAssignments.Any())
+                {
+                    bool hasNewNotif = false;
+                    int currentMaxId = await _db.Notifications.AnyAsync() ? await _db.Notifications.MaxAsync(n => n.Id) : 0;
+                    foreach (var ta in overdueAssignments)
+                    {
+                        var progress = await _db.Enrollments
+                            .Where(e => e.UserId == userId && e.CourseId == ta.CourseId)
+                            .Select(e => (int?)e.ProgressPercent)
+                            .FirstOrDefaultAsync() ?? 0;
+
+                        if (progress < 100 && ta.AssignedBy.HasValue)
+                        {
+                            var studentName = ta.User?.FullName ?? ta.User?.Username ?? "Nhân viên";
+                            var courseTitle = ta.Course?.Title ?? "Khóa học";
+                            var notifTitle = $"[QUÁ HẠN] Nhân viên {studentName} chưa hoàn thành khóa học '{courseTitle}'.";
+                            if (notifTitle.Length > 255)
+                            {
+                                notifTitle = notifTitle.Substring(0, 252) + "...";
+                            }
+
+                            var alreadyNotified = await _db.Notifications
+                                .AnyAsync(n => n.UserId == ta.AssignedBy.Value && n.Title == notifTitle);
+
+                            if (!alreadyNotified)
+                            {
+                                currentMaxId++;
+                                var notification = new Notification
+                                {
+                                    Id = currentMaxId,
+                                    UserId = ta.AssignedBy.Value,
+                                    Title = notifTitle,
+                                    IsRead = false
+                                };
+                                _db.Notifications.Add(notification);
+                                hasNewNotif = true;
+                            }
+                        }
+                    }
+                    if (hasNewNotif)
+                    {
+                        await _db.SaveChangesAsync();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: Failed to save overdue notifications in Dashboard: {ex.Message}\n{ex.InnerException?.Message}");
+            }
+
             var enrollments = await _db.Enrollments
                 .Include(e => e.Course)
                 .Where(e => e.UserId == userId)
@@ -87,6 +148,28 @@ public class StudentController : Controller
             var certificates = await _db.Certificates
                 .Where(c => c.UserId == userId)
                 .CountAsync();
+
+            var assignmentsList = await _db.TrainingAssignments
+                .Where(ta => ta.UserId == userId && ta.CourseId.HasValue)
+                .Select(ta => new { CourseId = ta.CourseId.Value, ta.DueDate })
+                .ToListAsync();
+
+            var assignments = new Dictionary<int, DateTime?>();
+            foreach (var ta in assignmentsList)
+            {
+                var cid = ta.CourseId;
+                if (!assignments.ContainsKey(cid))
+                {
+                    assignments[cid] = ta.DueDate;
+                }
+                else
+                {
+                    if (ta.DueDate.HasValue && (!assignments[cid].HasValue || ta.DueDate.Value > assignments[cid].Value))
+                    {
+                        assignments[cid] = ta.DueDate;
+                    }
+                }
+            }
 
             Console.WriteLine($"DEBUG: Found {enrollments.Count} enrollments");
 
@@ -106,7 +189,8 @@ public class StudentController : Controller
                         courseId = e.CourseId,
                         title = e.Course?.Title ?? "N/A",
                         progress = e.ProgressPercent ?? 0,
-                        status = e.Status
+                        status = e.Status,
+                        dueDate = (e.CourseId.HasValue && assignments.ContainsKey(e.CourseId.Value)) ? assignments[e.CourseId.Value] : null
                     })
             });
         } catch (Exception ex) {
@@ -121,6 +205,62 @@ public class StudentController : Controller
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
         var departmentId = GetCurrentDepartmentId();
+
+        try
+        {
+            // Quét các khóa học quá hạn mà học viên chưa hoàn thành để gửi thông báo cho Trưởng phòng
+            var overdueAssignments = await _db.TrainingAssignments
+                .Include(ta => ta.Course)
+                .Include(ta => ta.User)
+                .Where(ta => ta.UserId == userId && ta.DueDate.HasValue && ta.DueDate.Value < DateTime.Now)
+                .ToListAsync();
+
+            if (overdueAssignments.Any())
+            {
+                bool hasNewNotif = false;
+                foreach (var ta in overdueAssignments)
+                {
+                    var progress = await _db.Enrollments
+                        .Where(e => e.UserId == userId && e.CourseId == ta.CourseId)
+                        .Select(e => (int?)e.ProgressPercent)
+                        .FirstOrDefaultAsync() ?? 0;
+
+                    if (progress < 100 && ta.AssignedBy.HasValue)
+                    {
+                        var studentName = ta.User?.FullName ?? ta.User?.Username ?? "Nhân viên";
+                        var courseTitle = ta.Course?.Title ?? "Khóa học";
+                        var notifTitle = $"[QUÁ HẠN] Nhân viên {studentName} chưa hoàn thành khóa học '{courseTitle}'.";
+                        if (notifTitle.Length > 255)
+                        {
+                            notifTitle = notifTitle.Substring(0, 252) + "...";
+                        }
+
+                        var alreadyNotified = await _db.Notifications
+                            .AnyAsync(n => n.UserId == ta.AssignedBy.Value && n.Title == notifTitle);
+
+                        if (!alreadyNotified)
+                        {
+                            var notification = new Notification
+                            {
+                                UserId = ta.AssignedBy.Value,
+                                Title = notifTitle,
+                                IsRead = false
+                            };
+                            _db.Notifications.Add(notification);
+                            hasNewNotif = true;
+                        }
+                    }
+                }
+                if (hasNewNotif)
+                {
+                    await _db.SaveChangesAsync();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"ERROR: Failed to save overdue notifications in Courses: {ex.Message}\n{ex.InnerException?.Message}");
+        }
 
         var query = ApplyStudentCourseScope(_db.Courses
             .Include(c => c.Category)
@@ -151,7 +291,10 @@ public class StudentController : Controller
             progress = c.Enrollments.Where(e => e.UserId == userId)
                 .Select(e => e.ProgressPercent)
                 .FirstOrDefault() ?? 0,
-            quizCount = c.Exams.Count
+            quizCount = c.Exams.Count,
+            dueDate = c.TrainingAssignments.Where(ta => ta.UserId == userId)
+                .Select(ta => ta.DueDate)
+                .FirstOrDefault()
         }).ToListAsync();
 
         return Json(courses);
@@ -241,6 +384,8 @@ public class StudentController : Controller
         if (course == null) return NotFound();
 
         var isEnrolled = await _db.Enrollments.AnyAsync(e => e.CourseId == id && e.UserId == userId);
+        var progress = course.Enrollments.FirstOrDefault()?.ProgressPercent ?? 0;
+        var dueDate = course.TrainingAssignments.FirstOrDefault()?.DueDate;
 
         return Json(new
         {
@@ -251,6 +396,8 @@ public class StudentController : Controller
             isMandatory = course.IsMandatory,
             thumbnail = course.Thumbnail,
             enrolled = isEnrolled,
+            progress = progress,
+            dueDate = dueDate,
             totalModules = course.CourseModules.Count,
             totalLessons = course.CourseModules.SelectMany(m => m.Lessons).Count(),
             totalQuizzes = course.Exams.Count
@@ -287,6 +434,88 @@ public class StudentController : Controller
         return Ok(new { success = true });
     }
 
+    [HttpPost("/api/student/courses/{courseId}/request-extension")]
+    public async Task<IActionResult> RequestExtension(int courseId, [FromBody] RequestExtensionDto dto)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var student = await _db.Users.FindAsync(userId);
+        if (student == null) return NotFound("Học viên không tồn tại.");
+
+        var assignment = await _db.TrainingAssignments
+            .Include(ta => ta.Course)
+            .FirstOrDefaultAsync(ta => ta.CourseId == courseId && ta.UserId == userId);
+
+        if (assignment == null)
+        {
+            return BadRequest(new { error = "Không tìm thấy phân công đào tạo của khóa học này để gia hạn." });
+        }
+
+        var courseTitle = assignment.Course?.Title ?? "Khóa học";
+        var studentName = student.FullName ?? student.Username ?? "Học viên";
+
+        var managerId = assignment.AssignedBy;
+        if (!managerId.HasValue || managerId == 0)
+        {
+            var deptManager = await _db.Users
+                .Include(u => u.Roles)
+                .FirstOrDefaultAsync(u => u.DepartmentId == student.DepartmentId && 
+                    (u.IsDeptAdmin == true || u.Roles.Any(r => r.RoleName == "Manager" || r.RoleName == "DEPT ADMIN" || r.RoleName == "HR MANAGER")));
+            managerId = deptManager?.UserId;
+        }
+
+        if (!managerId.HasValue || managerId == 0)
+        {
+            var fallbackManager = await _db.Users
+                .Include(u => u.Roles)
+                .FirstOrDefaultAsync(u => u.IsItadmin == true || u.IsDeptAdmin == true || 
+                    u.Roles.Any(r => r.RoleName == "IT" || r.RoleName == "Manager" || r.RoleName == "DEPT ADMIN" || r.RoleName == "HR" || r.RoleName == "HR MANAGER"));
+            managerId = fallbackManager?.UserId;
+        }
+
+        if (!managerId.HasValue || managerId == 0)
+        {
+            return BadRequest(new { error = "Không tìm thấy Trưởng phòng/Quản trị viên để gửi thông báo." });
+        }
+
+        var reason = string.IsNullOrWhiteSpace(dto.Reason) ? "Không có lý do cụ thể" : dto.Reason;
+        var prefix = $"[GIA HẠN - ID:{assignment.AssignmentId}] {studentName} xin gia hạn '{courseTitle}'. Lý do: ";
+        var notifTitle = prefix + reason;
+        if (notifTitle.Length > 255)
+        {
+            notifTitle = notifTitle.Substring(0, 252) + "...";
+        }
+
+        int nextId = 1;
+        if (await _db.Notifications.AnyAsync())
+        {
+            nextId = await _db.Notifications.MaxAsync(n => n.Id) + 1;
+        }
+
+        var notification = new Notification
+        {
+            Id = nextId,
+            UserId = managerId.Value,
+            Title = notifTitle,
+            IsRead = false
+        };
+
+        _db.Notifications.Add(notification);
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            var innerMsg = ex.InnerException?.Message ?? ex.Message;
+            Console.WriteLine($"[ERROR] SaveChanges error in RequestExtension: {innerMsg}");
+            return StatusCode(500, new { error = $"Lỗi cơ sở dữ liệu: {innerMsg}" });
+        }
+
+        return Ok(new { success = true });
+    }
+
     [HttpGet("/Student/Learn/{courseId}")]
     public async Task<IActionResult> Learn(int courseId)
     {
@@ -296,6 +525,18 @@ public class StudentController : Controller
         var userId = GetCurrentUserId();
         var enrollment = await _db.Enrollments.FirstOrDefaultAsync(e => e.UserId == userId && e.CourseId == courseId);
         if (enrollment == null) return RedirectToAction("Index", "Student");
+
+        // Kiểm tra xem khóa học có quá hạn và bị khóa hay không
+        var assignment = await _db.TrainingAssignments.FirstOrDefaultAsync(ta => ta.UserId == userId && ta.CourseId == courseId);
+        if (assignment != null && assignment.DueDate.HasValue && assignment.DueDate.Value < DateTime.Now)
+        {
+            var progress = enrollment.ProgressPercent ?? 0;
+            if (progress < 100)
+            {
+                TempData["ErrorMessage"] = "Khóa học này đã quá hạn hoàn thành và bị khóa. Vui lòng liên hệ Trưởng phòng để được mở lại/gia hạn.";
+                return RedirectToAction("Index", "Student");
+            }
+        }
 
         var course = await _db.Courses.FindAsync(courseId);
         if (course == null) return NotFound();
@@ -317,6 +558,19 @@ public class StudentController : Controller
         var userId = GetCurrentUserId();
         var isEnrolled = await _db.Enrollments.AnyAsync(e => e.UserId == userId && e.CourseId == courseId);
         if (!isEnrolled) return RedirectToAction("Index", "Student");
+
+        // Kiểm tra xem khóa học có quá hạn và bị khóa hay không
+        var enrollment = await _db.Enrollments.FirstOrDefaultAsync(e => e.UserId == userId && e.CourseId == courseId);
+        var assignment = await _db.TrainingAssignments.FirstOrDefaultAsync(ta => ta.UserId == userId && ta.CourseId == courseId);
+        if (assignment != null && assignment.DueDate.HasValue && assignment.DueDate.Value < DateTime.Now)
+        {
+            var progress = enrollment?.ProgressPercent ?? 0;
+            if (progress < 100)
+            {
+                TempData["ErrorMessage"] = "Khóa học này đã quá hạn hoàn thành và bị khóa. Vui lòng liên hệ Trưởng phòng để được mở lại/gia hạn.";
+                return RedirectToAction("Index", "Student");
+            }
+        }
 
         var exam = await _db.Exams
             .Include(e => e.Course)
@@ -1290,6 +1544,88 @@ public class StudentController : Controller
     }
 
     // ============================================================
+    // API: TẢI XUỐNG TÀI LIỆU ĐÍNH KÈM (DOWNLOAD LESSON ATTACHMENT)
+    // ============================================================
+    [HttpGet("/Student/DownloadAttachment/{id}")]
+    public async Task<IActionResult> DownloadAttachment(int id)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return RedirectToAction("Login", "Auth");
+
+        var attachment = await _db.LessonAttachments
+            .Include(a => a.Lesson)
+                .ThenInclude(l => l!.Module)
+            .FirstOrDefaultAsync(a => a.AttachmentId == id);
+
+        if (attachment == null) return NotFound("Không tìm thấy tài liệu.");
+
+        // Kiểm tra quyền truy cập: Học viên đã đăng ký khóa học chứa bài học này chưa
+        if (attachment.Lesson?.Module?.CourseId != null)
+        {
+            var isEnrolled = await _db.Enrollments.AnyAsync(e => e.UserId == userId && e.CourseId == attachment.Lesson.Module.CourseId);
+            if (!isEnrolled) return Forbid();
+        }
+
+        var filePath = attachment.FilePath;
+        if (string.IsNullOrEmpty(filePath)) return NotFound("Đường dẫn tài liệu trống.");
+
+        // Nếu là link ngoài (Google Drive, http...) thì redirect sang link đó
+        if (filePath.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+        {
+            var redirectUrl = filePath;
+            if (filePath.Contains("drive.google.com"))
+            {
+                redirectUrl = GetGoogleDriveDownloadUrlInternal(filePath);
+            }
+            return Redirect(redirectUrl);
+        }
+
+        // Nếu là file cục bộ, resolve path vật lý và trả về File Result
+        var physicalPath = Path.Combine(_env.WebRootPath, filePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+
+        if (!System.IO.File.Exists(physicalPath))
+        {
+            throw new FileNotFoundException($"Không tìm thấy file vật lý trên server.\nĐường dẫn tìm kiếm: {physicalPath}\nWebRootPath của ứng dụng: {_env.WebRootPath}\nThư mục làm việc hiện tại: {Directory.GetCurrentDirectory()}\nFilePath trong DB: {filePath}");
+        }
+
+        var provider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+        if (!provider.TryGetContentType(physicalPath, out var contentType))
+        {
+            contentType = "application/octet-stream";
+        }
+
+        var downloadName = attachment.FileName ?? Path.GetFileName(physicalPath);
+        return PhysicalFile(physicalPath, contentType, downloadName);
+    }
+
+    private string GetGoogleDriveDownloadUrlInternal(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return url;
+        string fileId = "";
+        if (url.Contains("/file/d/"))
+        {
+            var parts = url.Split("/file/d/");
+            if (parts.Length > 1)
+            {
+                fileId = parts[1].Split('/')[0].Split('?')[0];
+            }
+        }
+        else if (url.Contains("?id=") || url.Contains("&id="))
+        {
+            var parts = url.Split(new[] { "?id=", "&id=" }, StringSplitOptions.None);
+            if (parts.Length > 1)
+            {
+                fileId = parts[1].Split('&')[0];
+            }
+        }
+        if (!string.IsNullOrEmpty(fileId))
+        {
+            return $"https://drive.google.com/uc?export=download&id={fileId}";
+        }
+        return url;
+    }
+
+    // ============================================================
     // API: B�NH LU?N B�I H?C (LESSON COMMENTS)
     // ============================================================
     [HttpGet("/api/student/lessons/{lessonId}/comments")]
@@ -1921,3 +2257,9 @@ public class CourseFeedbackDto
     public int Rating { get; set; }
     public string? Comment { get; set; }
 }
+
+public class RequestExtensionDto
+{
+    public string Reason { get; set; } = "";
+}
+
