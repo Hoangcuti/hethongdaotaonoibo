@@ -43,10 +43,16 @@ public class AuthController : Controller
         password = password.Trim();
 
         // 2. Tìm User trong DB (bao gồm cả Roles và Department để check quyền sau này)
+        var searchUsername = username;
+        if (searchUsername.Contains("@"))
+        {
+            searchUsername = searchUsername.Split('@')[0];
+        }
+
         var user = await _db.Users
             .Include(u => u.Roles)
             .Include(u => u.Department)
-            .FirstOrDefaultAsync(u => u.Username == username && u.Status == "Active");
+            .FirstOrDefaultAsync(u => (u.Username == searchUsername || u.Email == username) && u.Status == "Active");
 
         if (user == null)
         {
@@ -100,7 +106,10 @@ public class AuthController : Controller
             new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
             new Claim(ClaimTypes.Name, user.Username ?? ""),
             new Claim("FullName", user.FullName ?? ""),
-            new Claim(ClaimTypes.Role, role) // Lưu role vào Claim chính thống
+            new Claim(ClaimTypes.Role, role), // Lưu role vào Claim chính thống
+            new Claim("DepartmentID", user.DepartmentId?.ToString() ?? "0"),
+            new Claim("DepartmentName", user.Department?.DepartmentName ?? ""),
+            new Claim("IsDeptAdmin", (user.IsDeptAdmin == true).ToString())
         };
 
         var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -155,6 +164,8 @@ public class AuthController : Controller
             new Claim(ClaimTypes.Name, demo.Username),
             new Claim("FullName", demo.FullName),
             new Claim("DepartmentName", demo.DepartmentName),
+            new Claim("DepartmentID", demo.DepartmentId),
+            new Claim("IsDeptAdmin", (demo.Role == "Manager").ToString()),
             new Claim(ClaimTypes.Role, demo.Role)
         };
 
@@ -192,9 +203,9 @@ public class AuthController : Controller
 
         // Kiểm tra các Role từ bảng trung gian
         var roleNames = user.Roles.Select(r => r.RoleName?.ToUpper()).ToList();
-        var managerRoles = new[] { "HR", "TRAINING MANAGER", "HR MANAGER", "MANAGER", "DEPT ADMIN" };
+        var managerRoles = new[] { "HR", "TRAINING MANAGER", "HR MANAGER", "MANAGER", "DEPT ADMIN", "TRAINER", "LECTURER", "GIẢNG VIÊN" };
         
-        if (managerRoles.Any(mr => roleNames.Contains(mr)))
+        if (managerRoles.Any(mr => roleNames.Contains(mr)) || user.IsDeptAdmin == true)
             return "Manager";
 
         return "Student";

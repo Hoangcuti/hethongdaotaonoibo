@@ -296,9 +296,10 @@ function renderDocumentLibraryFilters() {
     const courseFilter = document.getElementById('libraryCourseFilter');
     if (courseFilter) {
         const currentCourse = courseFilter.value;
-        courseFilter.innerHTML = '<option value="">Tất cả khóa học</option>' + (documentLibraryData.courses || []).map(c => `
-            <option value="${c.id || c.courseId}">${libraryEscape(c.title || c.courseName)}</option>
-        `).join('');
+        courseFilter.innerHTML = '<option value="">Tất cả khóa học</option>' + (documentLibraryData.courses || []).map(c => {
+            const code = c.courseCode || c.CourseCode || '';
+            return `<option value="${c.id || c.courseId}">${libraryEscape(c.title || c.courseName)}${code ? ` (${code})` : ''}</option>`;
+        }).join('');
         courseFilter.value = currentCourse;
     }
 }
@@ -373,7 +374,7 @@ function renderDocumentLibrary() {
                 <td>${row.moduleId}</td>
                 <td><strong>${libraryEscape(row.title)}</strong></td>
                 <td>${row.level ? `<span class="badge badge-info">Level ${row.level}</span>` : '<span style="color:#94a3b8">--</span>'}</td>
-                <td>${row.deptName || row.categoryName || '<span style="color:#94a3b8">Hệ thống</span>'}</td>
+                <td>${row.courseTitle ? `<span class="badge badge-blue" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe">${libraryEscape(row.courseTitle)}${row.courseCode || row.CourseCode ? ` (${row.courseCode || row.CourseCode})` : ''}</span>` : (row.deptName || row.categoryName || '<span style="color:#94a3b8">Hệ thống</span>')}</td>
                 <td>${row.lessonsCount || 0}</td>
                 <td>
                     <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -404,7 +405,7 @@ function renderDocumentLibrary() {
                     </div>
                 </td>
                 <td>${libraryEscape(row.moduleTitle || 'Chưa gán')}</td>
-                <td><span class="badge badge-blue">${libraryEscape(row.courseTitle || 'Chưa gán khóa học')}</span></td>
+                <td><span class="badge badge-blue">${libraryEscape(row.courseTitle || 'Chưa gán khóa học')}${row.courseCode || row.CourseCode ? ` (${row.courseCode || row.CourseCode})` : ''}</span></td>
                 <td>${attachments}</td>
                 <td>
                     <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -426,7 +427,7 @@ function renderDocumentLibrary() {
                 <div style="font-size:11px; color:#64748b; margin-top:2px">Cập nhật: ${fmtDate(row.createdAt)}</div>
             </td>
             <td>${row.level ? `<span class="badge badge-info" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd">Level ${row.level}</span>` : '<span style="color:#94a3b8">--</span>'}</td>
-            <td><span class="badge" style="background:#fff7ed; color:#c2410c; border:1px solid #ffedd5">${libraryEscape(row.courseTitle || 'Chưa gán')}</span></td>
+            <td><span class="badge" style="background:#fff7ed; color:#c2410c; border:1px solid #ffedd5">${libraryEscape(row.courseTitle || 'Chưa gán')}${row.courseCode || row.CourseCode ? ` (${row.courseCode || row.CourseCode})` : ''}</span></td>
             <td>
                 <div style="display:flex;gap:4px;flex-wrap:wrap">
                     <span class="badge badge-info" style="font-size:10px" title="Thời gian">${row.durationMinutes || 0} phút</span>
@@ -469,9 +470,10 @@ function openLibraryCreateModal() {
         if (currentLibraryTab === 'lessons') {
             const select = document.getElementById('libraryLessonModuleInput');
             if (select) {
-                const options = (documentLibraryData.modules || []).map(m => 
-                    `<option value="${m.moduleId}">${libraryEscape(m.title)}</option>`
-                ).join('');
+                const options = (documentLibraryData.modules || []).map(m => {
+                    const code = m.courseCode || m.CourseCode || '';
+                    return `<option value="${m.moduleId}">${libraryEscape(m.title)}${code ? ` (${code})` : ''}</option>`;
+                }).join('');
                 select.innerHTML = options || '<option value="">(Không có chương)</option>';
             }
             
@@ -511,17 +513,19 @@ function openLibraryCreateModal() {
 function fillLibraryCourseOptions(elementId) {
     const select = document.getElementById(elementId);
     if (!select) return;
-    select.innerHTML = '<option value="">-- Chọn khóa học --</option>' + documentLibraryData.courses.map(course => `
-        <option value="${course.courseId}">${libraryEscape(course.title || `Khóa học #${course.courseId}`)}</option>
-    `).join('');
+    select.innerHTML = '<option value="">-- Chọn khóa học --</option>' + documentLibraryData.courses.map(course => {
+        const code = course.courseCode || course.CourseCode || '';
+        return `<option value="${course.courseId}">${libraryEscape(course.title || `Khóa học #${course.courseId}`)}${code ? ` (${code})` : ''}</option>`;
+    }).join('');
 }
 
 function fillLibraryModuleOptions(elementId) {
     const select = document.getElementById(elementId);
     if (!select) return;
-    select.innerHTML = '<option value="">-- Chọn chương --</option>' + documentLibraryData.modules.map(module => `
-        <option value="${module.moduleId}">${libraryEscape(module.title || `Chương #${module.moduleId}`)}${module.courseTitle ? ` - ${libraryEscape(module.courseTitle)}` : ''}</option>
-    `).join('');
+    select.innerHTML = '<option value="">-- Chọn chương --</option>' + documentLibraryData.modules.map(module => {
+        const code = module.courseCode || module.CourseCode || '';
+        return `<option value="${module.moduleId}">${libraryEscape(module.title || `Chương #${module.moduleId}`)}${module.courseTitle ? ` - ${libraryEscape(module.courseTitle)}` : ''}${code ? ` (${code})` : ''}</option>`;
+    }).join('');
 }
 
 async function syncDocumentLibraryAfterCreate(options = {}) {
@@ -978,7 +982,58 @@ async function loadOverview() {
     }
 }
 
+let currentUsersPage = 1;
+
+function renderUsersPagination(total, currentPage, pageSize) {
+    const paginationEl = document.getElementById('usersPagination');
+    if (!paginationEl) return;
+    
+    const totalPages = Math.ceil(total / pageSize);
+    if (totalPages <= 1) {
+        paginationEl.innerHTML = '';
+        return;
+    }
+    
+    let html = '';
+    
+    // Nút Previous
+    html += `<button class="page-btn" ${currentPage === 1 ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''} onclick="loadUsers(${currentPage - 1})">◀</button>`;
+    
+    // Các trang số
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    
+    if (endPage - startPage < maxVisiblePages - 1) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    
+    if (startPage > 1) {
+        html += `<button class="page-btn" onclick="loadUsers(1)">1</button>`;
+        if (startPage > 2) {
+            html += `<span class="pagination-ellipsis" style="padding: 10px 6px; color: var(--color-text-muted);">...</span>`;
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="loadUsers(${i})">${i}</button>`;
+    }
+    
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            html += `<span class="pagination-ellipsis" style="padding: 10px 6px; color: var(--color-text-muted);">...</span>`;
+        }
+        html += `<button class="page-btn" onclick="loadUsers(${totalPages})">${totalPages}</button>`;
+    }
+    
+    // Nút Next
+    html += `<button class="page-btn" ${currentPage === totalPages ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''} onclick="loadUsers(${currentPage + 1})">▶</button>`;
+    
+    paginationEl.innerHTML = html;
+}
+
 async function loadUsers(page = 1) {
+    currentUsersPage = page;
     const search = document.getElementById('userSearch')?.value || '';
     try {
         const data = await apiFetch(`/api/it/users?search=${encodeURIComponent(search)}&page=${page}&pageSize=15`);
@@ -997,6 +1052,11 @@ async function loadUsers(page = 1) {
                 </td>
             </tr>
         `).join('');
+        
+        renderUsersPagination(data.total, page, 15);
+        
+        // Tự động cuộn lên đầu trang
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch(e) {
         if(typeof console !== 'undefined') console.error(e);
         if(typeof showToast === 'function') showToast(e.message || 'Lỗi API Backend: Mã lỗi 500', 'error');
@@ -1032,6 +1092,118 @@ function updateSelectedList() {
 }
 // submitBulkDept combined with submitBulkDeptUpdate/new logic
 
+function removeVietnameseAccents(str) {
+    return str
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'd')
+        .toLowerCase();
+}
+
+function getDeptPrefix(name) {
+    if (!name) return "NV";
+    const lower = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
+    if (lower.includes("giam doc")) return "GD";
+    if (lower.includes("nhan su")) return "HR";
+    if (lower.includes("ky thuat") || lower.includes("san xuat")) return "KT";
+    if (lower.includes("kinh doanh") || lower.includes("marketing")) return "KD";
+    if (lower.includes("tai chinh") || lower.includes("ke toan")) return "TC";
+    if (lower.includes("cong nghe") || lower.includes("thong tin") || lower.includes("it")) return "IT";
+    if (lower.includes("dao tao") || lower.includes("giang vien")) return "GV";
+    return "NV";
+}
+
+function onNewDepartmentChange() {
+    const dEl = document.getElementById('newDepartment');
+    const codeEl = document.getElementById('newEmployeeCode');
+    if (!dEl || !codeEl) return;
+    
+    const deptId = dEl.value;
+    const dept = (departments || []).find(d => d.departmentId == deptId);
+    const prefix = getDeptPrefix(dept ? dept.departmentName : '');
+    
+    let currentVal = codeEl.value.trim();
+    if (!currentVal) {
+        codeEl.value = prefix + String(Math.floor(1000 + Math.random() * 9000));
+    } else {
+        const match = currentVal.match(/^([A-Za-z]{2})(.*)$/);
+        if (match) {
+            codeEl.value = prefix + match[2];
+        } else {
+            codeEl.value = prefix + currentVal;
+        }
+    }
+    onNewEmployeeCodeInput();
+}
+
+function generateEmailFromNameAndCode(fullName, empCode) {
+    if (!fullName) return '';
+    const cleanedName = removeVietnameseAccents(fullName).trim();
+    const words = cleanedName.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return '';
+    
+    const givenName = words[words.length - 1]; // e.g. "hieu"
+    const initials = words.slice(0, -1).map(w => w[0]).join(''); // e.g. "dd"
+    
+    const codeLower = (empCode || '').trim().toLowerCase();
+    
+    return `${givenName}${initials}${codeLower}@basau.net`;
+}
+
+function onNewFullNameInput() {
+    const fullNameEl = document.getElementById('newFullName');
+    const employeeCodeEl = document.getElementById('newEmployeeCode');
+    const emailEl = document.getElementById('newEmail');
+    const usernameEl = document.getElementById('newUsername');
+    
+    if (!fullNameEl) return;
+    
+    const fullName = fullNameEl.value.trim();
+    if (!fullName) {
+        if (employeeCodeEl) employeeCodeEl.value = '';
+        if (emailEl) emailEl.value = '';
+        if (usernameEl) usernameEl.value = '';
+        return;
+    }
+    
+    let empCode = employeeCodeEl ? employeeCodeEl.value.trim() : '';
+    if (!empCode) {
+        const dEl = document.getElementById('newDepartment');
+        const deptId = dEl ? dEl.value : '';
+        const dept = (departments || []).find(d => d.departmentId == deptId);
+        const prefix = getDeptPrefix(dept ? dept.departmentName : '');
+        empCode = prefix + String(Math.floor(1000 + Math.random() * 9000));
+        if (employeeCodeEl) employeeCodeEl.value = empCode;
+    }
+    
+    const email = generateEmailFromNameAndCode(fullName, empCode);
+    if (emailEl) emailEl.value = email;
+    if (usernameEl) {
+        usernameEl.value = email.split('@')[0];
+    }
+}
+
+function onNewEmployeeCodeInput() {
+    const fullNameEl = document.getElementById('newFullName');
+    const employeeCodeEl = document.getElementById('newEmployeeCode');
+    const emailEl = document.getElementById('newEmail');
+    const usernameEl = document.getElementById('newUsername');
+    
+    if (!fullNameEl || !employeeCodeEl) return;
+    
+    const fullName = fullNameEl.value.trim();
+    const empCode = employeeCodeEl.value.trim();
+    
+    if (fullName && empCode) {
+        const email = generateEmailFromNameAndCode(fullName, empCode);
+        if (emailEl) emailEl.value = email;
+        if (usernameEl) {
+            usernameEl.value = email.split('@')[0];
+        }
+    }
+}
+
 async function submitCreateUser() {
     const uEl = document.getElementById('newUsername');
     const pEl = document.getElementById('newPassword');
@@ -1040,15 +1212,28 @@ async function submitCreateUser() {
     const mEl = document.getElementById('newEmail');
     const dEl = document.getElementById('newDepartment');
 
+    let emailVal = mEl ? mEl.value.trim() : '';
+    if (emailVal) {
+        emailVal = emailVal.split('@')[0] + '@basau.net';
+    }
+    let usernameVal = uEl ? uEl.value.trim() : '';
+    if (usernameVal) {
+        usernameVal = usernameVal.split('@')[0];
+    } else if (emailVal) {
+        usernameVal = emailVal.split('@')[0];
+    }
+
     const body = {
-        username: uEl ? uEl.value : '',
-        password: (pEl ? pEl.value : '') || '123',
-        fullName: fEl ? fEl.value : '',
-        employeeCode: (eEl ? eEl.value : '') || ('NV' + Math.floor(Math.random() * 1000000)),
-        email: (mEl ? mEl.value : '') || (uEl ? uEl.value + '@domain.com' : ''),
+        username: usernameVal,
+        password: (pEl ? pEl.value : '') || '123456',
+        fullName: fEl ? fEl.value.trim() : '',
+        employeeCode: eEl ? eEl.value.trim() : '',
+        email: emailVal,
         departmentId: dEl ? parseInt(dEl.value) || null : null
     };
     if(!body.username) { showToast('Vui lòng nhập tên đăng nhập!', 'error'); return; }
+    if(!body.fullName) { showToast('Vui lòng nhập họ và tên!', 'error'); return; }
+    if(!body.email) { showToast('Vui lòng nhập email!', 'error'); return; }
     
     try {
         await apiFetch('/api/it/users', { method: 'POST', body: JSON.stringify(body) });
@@ -1089,7 +1274,7 @@ async function submitEditUser() {
         await apiFetch(`/api/it/users/${id}`, { method: 'PUT', body: JSON.stringify(body) });
         showToast('Cập nhật thành công!');
         closeModal('editUserModal');
-        loadUsers(1);
+        loadUsers(currentUsersPage);
     } catch(e) {
         showToast(e.message || 'Lỗi cập nhật', 'error');
     }
@@ -1132,7 +1317,7 @@ async function submitUserRoles() {
 
         showToast('Cập nhật role thành công!');
         closeModal('userRoleModal');
-        loadUsers();
+        loadUsers(currentUsersPage);
     } catch(e) {
         showToast(e.message || 'Lỗi cập nhật role', 'error');
     }
@@ -1143,7 +1328,11 @@ async function deleteUser(id, username) {
     try {
         await apiFetch(`/api/it/users/${id}`, { method: 'DELETE' });
         showToast('Đã vô hiệu hóa tài khoản thành công!', 'warning');
-        loadUsers(1);
+        if (loadedUsersList.length <= 1 && currentUsersPage > 1) {
+            loadUsers(currentUsersPage - 1);
+        } else {
+            loadUsers(currentUsersPage);
+        }
     } catch(e) {
         showToast(e.message || 'Lỗi xóa tài khoản', 'error');
     }
@@ -1462,7 +1651,14 @@ async function loadBuilderLibrary() {
 
 function renderBuilderBoards() {
     const levelFilter = document.getElementById('builderLevelFilter').value;
-    const filterFn = (item) => !levelFilter || String(item.level) === String(levelFilter);
+    const codeFilter = (document.getElementById('builderCourseCodeFilter')?.value || '').trim().toLowerCase();
+    
+    const filterFn = (item) => {
+        const matchesLevel = !levelFilter || String(item.level) === String(levelFilter);
+        const itemCode = (item.courseCode || item.CourseCode || '').toLowerCase();
+        const matchesCode = !codeFilter || itemCode.includes(codeFilter);
+        return matchesLevel && matchesCode;
+    };
     
     const mods = (documentLibraryData.modules || []).filter(filterFn);
     document.getElementById('libModulesList').innerHTML = mods.map(m => `
@@ -1470,7 +1666,7 @@ function renderBuilderBoards() {
             <span style="color:#1d4ed8">🧩</span>
             <div style="flex:1">
                 <div style="font-size:12px; font-weight:600;">${libraryEscape(m.title)}</div>
-                <div style="font-size:10px; color:#64748b">ID: ${m.moduleId} ${m.level ? "| L" + m.level : ""}</div>
+                <div style="font-size:10px; color:#64748b">ID: ${m.moduleId} ${m.level ? "| L" + m.level : ""} ${m.courseCode ? "| " + m.courseCode : ""}</div>
             </div>
         </div>
     `).join('') || '<div style="text-align:center; padding:15px; color:#94a3b8; font-size:11px;">Trống</div>';
@@ -1481,7 +1677,7 @@ function renderBuilderBoards() {
             <span style="color:#15803d">📄</span>
             <div style="flex:1">
                 <div style="font-size:12px; font-weight:600;">${libraryEscape(l.title)}</div>
-                <div style="font-size:10px; color:#64748b">${l.contentType} | ID: ${l.lessonId} ${l.level ? "| L" + l.level : ""}</div>
+                <div style="font-size:10px; color:#64748b">${l.contentType} | ID: ${l.lessonId} ${l.level ? "| L" + l.level : ""} ${l.courseCode ? "| " + l.courseCode : ""}</div>
             </div>
         </div>
     `).join('') || '<div style="text-align:center; padding:15px; color:#94a3b8; font-size:11px;">Trống</div>';
@@ -1492,7 +1688,7 @@ function renderBuilderBoards() {
             <span style="color:#c2410c">❓</span>
             <div style="flex:1">
                 <div style="font-size:12px; font-weight:600;">${libraryEscape(e.examTitle)}</div>
-                <div style="font-size:10px; color:#64748b">${e.durationMinutes}p | ID: ${e.examId} ${e.level ? "| L" + e.level : ""}</div>
+                <div style="font-size:10px; color:#64748b">${e.durationMinutes}p | ID: ${e.examId} ${e.level ? "| L" + e.level : ""} ${e.courseCode ? "| " + e.courseCode : ""}</div>
             </div>
         </div>
     `).join('') || '<div style="text-align:center; padding:15px; color:#94a3b8; font-size:11px;">Trống</div>';
@@ -2423,11 +2619,56 @@ async function loadBackupLogs() {
                 <td><code style="font-size:12px">${b.fileName}</code></td>
                 <td><span class="badge ${b.backupType==='Full'?'badge-info':b.backupType==='Incremental'?'badge-purple':'badge-green'}">${b.backupType}</span></td>
                 <td>${fmtDateTime(b.createdAt)}</td>
-            </tr>`).join('') || '<tr><td colspan="4" style="text-align:center">Chưa có bản backup nào</td></tr>';
+                <td>
+                    <div style="display:flex; gap:8px">
+                        <button class="btn btn-sm" style="background:#e0f2fe;color:#0369a1;border:none;padding:4px 8px;font-size:12px;font-weight:600" onclick="downloadBackup(${b.backupId})" title="Tải xuống">📥 Tải xuống</button>
+                        <button class="btn btn-danger btn-sm" style="padding:4px 8px;font-size:12px;font-weight:600" onclick="deleteBackup(${b.backupId})" title="Xóa">🗑️ Xóa</button>
+                    </div>
+                </td>
+            </tr>`).join('') || '<tr><td colspan="5" style="text-align:center">Chưa có bản backup nào</td></tr>';
     } catch(e) {
         showToast('Lỗi tải backup logs', 'error');
     }
 }
+
+async function downloadBackup(id) {
+    try {
+        const url = `/api/it/backuplogs/download/${id}`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || 'Lỗi server: ' + response.status);
+        }
+        const blob = await response.blob();
+        const contentDisp = response.headers.get('Content-Disposition') || '';
+        let fileName = `LMS_Backup_${id}.sql`;
+        const match = contentDisp.match(/filename[^;=\n]*=((['"])(.*?)\2|([^;\n]*))/);
+        if (match) fileName = match[3] || match[4] || fileName;
+
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+        showToast('Tải file backup thành công: ' + fileName, 'success');
+    } catch(e) {
+        showToast('Lỗi tải file backup: ' + (e.message || e), 'error');
+    }
+}
+
+async function deleteBackup(id) {
+    if (!confirm('Bạn có chắc chắn muốn xóa bản backup này không?')) return;
+    try {
+        await apiFetch(`/api/it/backuplogs/${id}`, { method: 'DELETE' });
+        showToast('Đã xóa bản backup.', 'success');
+        loadBackupLogs();
+    } catch (e) {
+        showToast(e.message || 'Lỗi xóa bản backup', 'error');
+    }
+}
+
 
 async function createBackup() {
     const backupType = document.getElementById('backupTypeSelect').value;
@@ -2696,7 +2937,7 @@ function addNewQuestionUI(data = null, index = null) {
         <div class="grid-2" style="gap:10px;">
             ${options.map((opt, i) => `
                 <div style="display:flex; align-items:center; gap:8px; background:#f8fafc; padding:8px; border-radius:6px; border:1px solid #f1f5f9;">
-                    <input type="radio" name="correct_${idx}" class="q-correct" value="${i}" ${opt.isCorrect ? 'checked' : ''}>
+                    <input type="checkbox" class="q-correct" value="${i}" ${opt.isCorrect ? 'checked' : ''} style="cursor:pointer; width:16px; height:16px;">
                     <input type="text" class="form-input q-opt" style="border:none; background:transparent; padding:4px;" placeholder="Đáp án ${i+1}" value="${libraryEscape(opt.optionText)}">
                 </div>
             `).join('')}
@@ -2757,13 +2998,14 @@ async function saveExamQuestionsBatch() {
         const points = parseFloat(row.querySelector('.q-points').value) || 0;
         totalPoints += points;
         const optsEls = row.querySelectorAll('.q-opt');
-        const correctIdx = parseInt(row.querySelector('.q-correct:checked')?.value || '0');
+        const correctCheckboxes = row.querySelectorAll('.q-correct');
         
         const options = [];
         optsEls.forEach((optEl, i) => {
             const optText = optEl.value.trim();
             if (optText) {
-                options.push({ optionText: optText, isCorrect: i === correctIdx });
+                const isCorrect = correctCheckboxes[i]?.checked || false;
+                options.push({ optionText: optText, isCorrect: isCorrect });
             }
         });
 
@@ -2774,6 +3016,11 @@ async function saveExamQuestionsBatch() {
         }
         if (options.length < 2) {
             showToast(`Câu ${idx+1} cần ít nhất 2 đáp án!`, 'error');
+            hasError = true;
+            return;
+        }
+        if (!options.some(o => o.isCorrect)) {
+            showToast(`Câu ${idx+1} cần ít nhất 1 đáp án đúng!`, 'error');
             hasError = true;
             return;
         }
@@ -3105,7 +3352,7 @@ async function assignDepartmentManager() {
         showToast('Đã cập nhật trưởng phòng thành công!', 'success');
         await openDepartmentDetailModal(departmentId);
         await loadItDepartments();
-        await loadUsers(1);
+        await loadUsers(currentUsersPage);
     } catch (e) {
         showToast(e.message || 'Lỗi cập nhật trưởng phòng', 'error');
     }
@@ -3570,145 +3817,7 @@ async function uploadLessonAssets(lessonId, fileInputId, linkInputId) {
     }
 }
 
-// ============================================================
-// MODERN QUIZ BUILDER (BATCH)
-// ============================================================
-let batchQuestions = [];
-
-function openQuestionsMgmtModal(examId) {
-    document.getElementById('qMgmtExamId').value = examId;
-    document.getElementById('questionsListContainer').innerHTML = '';
-    batchQuestions = [];
-    addNewQuestionUI();
-    openModal('questionsMgmtModal');
-}
-
-function addNewQuestionUI() {
-    const container = document.getElementById('questionsListContainer');
-    if (!container) return;
-    const qIndex = container.children.length;
-    const qNum = qIndex + 1;
-    
-    const qHtml = `
-        <div class="card" style="border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom:15px;">
-            <div class="card-header" style="background:#f1f5f9; display:flex; justify-content:space-between; align-items:center; padding:10px 15px;">
-                <strong style="color:#0f172a">Câu hỏi ${qNum}</strong>
-                <button class="btn btn-sm" style="color:#ef4444" onclick="this.closest('.card').remove(); updateNextQuestionNum();">✖ Xóa</button>
-            </div>
-            <div class="card-body" style="padding:15px">
-                <div class="form-group">
-                    <label class="form-label">Nội dung câu hỏi *</label>
-                    <textarea class="form-input q-text" rows="2" placeholder="Nhập câu hỏi..."></textarea>
-                </div>
-                <div class="grid-2" style="margin-top:10px;">
-                    <div>
-                        <label class="form-label">Điểm</label>
-                        <input type="number" class="form-input q-points" value="10">
-                    </div>
-                </div>
-                <div style="margin-top:15px;">
-                    <label class="form-label" style="display:block; margin-bottom:8px;">Đáp án (Chọn nút tròn cho đáp án đúng)</label>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                        ${[1,2,3,4].map(i => `
-                            <div style="display:flex; align-items:center; gap:8px; background:#f8fafc; padding:8px; border-radius:6px; border:1px solid #e2e8f0;">
-                                <input type="radio" name="correct_${qIndex}" value="${i-1}" ${i===1?'checked':''}>
-                                <input type="text" class="form-input q-opt-${i}" style="border:none; background:transparent; padding:0;" placeholder="Đáp án ${i}...">
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    container.insertAdjacentHTML('beforeend', qHtml);
-    updateNextQuestionNum();
-}
-
-function updateNextQuestionNum() {
-    const container = document.getElementById('questionsListContainer');
-    if (!container) return;
-    const nextNum = container.children.length + 1;
-    const el = document.getElementById('nextQuestionNum');
-    if (el) el.textContent = nextNum;
-}
-
-async function saveExamQuestionsBatch() {
-    const examId = document.getElementById('qMgmtExamId').value;
-    const container = document.getElementById('questionsListContainer');
-    const cards = container.querySelectorAll('.card');
-    
-    const questions = [];
-    cards.forEach((card, idx) => {
-        const text = card.querySelector('.q-text').value.trim();
-        const points = parseFloat(card.querySelector('.q-points').value) || 0;
-        const correctRadio = card.querySelector(`input[name^="correct_"]:checked`);
-        const correctIdx = correctRadio ? parseInt(correctRadio.value) : 0;
-        
-        const options = [];
-        for(let i=1; i<=4; i++) {
-            const optVal = card.querySelector(`.q-opt-${i}`).value.trim();
-            if (optVal) {
-                options.push({ optionText: optVal, isCorrect: (options.length === correctIdx) });
-            }
-        }
-        
-        if (text && options.length >= 2) {
-            questions.push({ questionText: text, points, options });
-        }
-    });
-
-    if (questions.length === 0) return showToast('Vui lòng nhập ít nhất 1 câu hỏi hợp lệ!', 'warning');
-
-    const status = document.getElementById('qMgmtStatus');
-    if (status) status.textContent = '⏳ Đang lưu...';
-    
-    try {
-        await apiFetch(`/api/it/exams/${examId}/questions/batch`, {
-            method: 'POST',
-            body: JSON.stringify(questions)
-        });
-        showToast(`Lưu thành công ${questions.length} câu hỏi!`);
-        closeModal('questionsMgmtModal');
-        renderExamDetails(examId, 'Cập nhật...');
-    } catch (e) {
-        showToast('Lỗi lưu câu hỏi: ' + e.message, 'error');
-        if (status) status.textContent = '❌ Lỗi lưu câu hỏi';
-    }
-}
-
-async function suggestMultipleQuestionsAI() {
-    const context = document.getElementById('aiQuestionBatchContext')?.value || 'kiến thức tổng quát';
-    showToast('AI đang soạn bộ câu hỏi...', 'info');
-    
-    try {
-        const result = await apiFetch('/api/it/generate-quiz-ai', {
-            method: 'POST',
-            body: JSON.stringify({ prompt: context, count: 5 })
-        });
-        
-        if (result.questions && result.questions.length > 0) {
-            const container = document.getElementById('questionsListContainer');
-            result.questions.forEach(q => {
-                addNewQuestionUI();
-                const lastCard = container.lastElementChild;
-                lastCard.querySelector('.q-text').value = q.questionText;
-                lastCard.querySelector('.q-points').value = q.points || 10;
-                
-                if (q.options) {
-                   q.options.forEach((opt, i) => {
-                       const optInput = lastCard.querySelector(`.q-opt-${i+1}`);
-                       if (optInput) optInput.value = (typeof opt === 'string') ? opt : (opt.optionText || '');
-                   });
-                   const correctRadio = lastCard.querySelector(`input[value="${q.correctOptionIndex || 0}"]`);
-                   if (correctRadio) correctRadio.checked = true;
-                }
-            });
-            showToast(`AI đã gợi ý thêm ${result.questions.length} câu!`, 'success');
-        }
-    } catch (e) {
-        showToast('Lỗi AI: ' + e.message, 'error');
-    }
-}
+// Legacy questions builder overridden by primary implementations above. Deleted to prevent override issues.
 
 // ============================================================
 // USER SELECTION & BULK ACTIONS

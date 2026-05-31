@@ -97,10 +97,19 @@
         <div class="page-subtitle" id="pageSubtitle">Dashboard quản lý nhân sự và đào tạo</div>
     </div>
     <div class="header-actions">
-        <button class="btn btn-secondary" id="btnBroadcast" onclick="navigate('courses'); openAssignDeptModal();">
-            📢 Giao toàn phòng
-        </button>
-        <button class="btn btn-primary" onclick="openModal('createEmployeeModal')">
+        @if (Context.Session.GetString("DepartmentName") == "Trung tâm Đào tạo Nội bộ")
+        {
+            <button class="btn btn-secondary" id="btnBroadcast" onclick="navigate('courses'); openAssignDeptModal();">
+                📢 Phân khóa học cho phòng ban
+            </button>
+        }
+        else
+        {
+            <button class="btn btn-secondary" id="btnBroadcast" onclick="navigate('courses'); openAssignDeptModal();">
+                📢 Giao toàn phòng
+            </button>
+        }
+        <button class="btn btn-primary" onclick="openCreateEmployeeModal()">
             ➕ Thêm nhân sự
         </button>
     </div>
@@ -154,7 +163,7 @@
             <button class="emp-filter-btn active" id="fAll" onclick="setFilter('all')">Tất cả</button>
             <button class="emp-filter-btn" id="fActive" onclick="setFilter('active')">✅ Đang làm</button>
             <button class="emp-filter-btn" id="fInactive" onclick="setFilter('inactive')">⛔ Vô hiệu</button>
-            <button class="btn btn-primary btn-sm" onclick="openModal('createEmployeeModal')">➕ Thêm nhân sự</button>
+            <button class="btn btn-primary btn-sm" onclick="openCreateEmployeeModal()">➕ Thêm nhân sự</button>
         </div>
         <div id="empCountLabel" style="font-size:13px; color:var(--text-secondary); margin-bottom:12px;"></div>
         <div class="emp-cards-grid" id="empCardsGrid">
@@ -167,7 +176,14 @@
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
             <div style="font-size:14px; color:var(--text-secondary);" id="courseCountLabel">Đang tải...</div>
             <div style="display:flex;gap:10px;">
-                <button class="btn btn-secondary" onclick="openAssignDeptModal()">📢 Giao toàn phòng</button>
+                @if (Context.Session.GetString("DepartmentName") == "Trung tâm Đào tạo Nội bộ")
+                {
+                    <button class="btn btn-secondary" onclick="openAssignDeptModal()">📢 Phân khóa học cho phòng ban</button>
+                }
+                else
+                {
+                    <button class="btn btn-secondary" onclick="openAssignDeptModal()">📢 Giao toàn phòng</button>
+                }
                 <button class="btn btn-primary" onclick="openCreateCourseModal()">✨ Tạo khóa học AI</button>
             </div>
         </div>
@@ -563,17 +579,28 @@
 <!-- Modal: Giao toàn phòng ban -->
 <div class="modal-backdrop" id="assignDeptModal">
     <div class="modal-box" style="max-width:460px;">
-        <div class="modal-header"><div class="modal-title">📢 Giao đào tạo toàn phòng</div><button class="modal-close" onclick="closeModal('assignDeptModal')">✕</button></div>
+        <div class="modal-header"><div class="modal-title">📢 Giao đào tạo phòng ban</div><button class="modal-close" onclick="closeModal('assignDeptModal')">✕</button></div>
         <div class="modal-body">
             <div style="padding:12px;background:rgba(245,158,11,.08);border-radius:8px;font-size:13px;color:#f59e0b;margin-bottom:14px;">
-                ⚡ Tất cả nhân viên đang hoạt động trong phòng ban sẽ được tự động giao khóa học này.
+                ⚡ Tất cả nhân viên đang hoạt động trong phòng ban được chọn sẽ được tự động giao khóa học này.
             </div>
             <div class="form-group"><label class="form-label">Chọn khóa học *</label><select id="assignDeptCourse" class="form-input"><option value="">-- Chọn khóa học --</option></select></div>
+            @if (Context.Session.GetString("DepartmentName") == "Trung tâm Đào tạo Nội bộ")
+            {
+                <div class="form-group"><label class="form-label">Chọn phòng ban nhận *</label><select id="assignDeptSelect" class="form-input"><option value="">-- Chọn phòng ban --</option></select></div>
+            }
             <div class="form-group"><label class="form-label">Hạn hoàn thành</label><input type="date" id="assignDeptDueDate" class="form-input"></div>
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeModal('assignDeptModal')">Hủy</button>
-            <button class="btn btn-primary" style="background:linear-gradient(135deg,#f59e0b,#d97706);" onclick="submitAssignDept()">💥 Giao toàn phòng</button>
+            @if (Context.Session.GetString("DepartmentName") == "Trung tâm Đào tạo Nội bộ")
+            {
+                <button class="btn btn-primary" style="background:linear-gradient(135deg,#f59e0b,#d97706);" onclick="submitAssignDept()">💥 Phân công phòng ban</button>
+            }
+            else
+            {
+                <button class="btn btn-primary" style="background:linear-gradient(135deg,#f59e0b,#d97706);" onclick="submitAssignDept()">💥 Giao toàn phòng</button>
+            }
         </div>
     </div>
 </div>
@@ -691,6 +718,9 @@
 @section Scripts {
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+const userRole = '@Context.Session.GetString("Role")';
+const currentUserId = parseInt('@Context.Session.GetString("UserID")');
+const isTrainingCenter = @(Context.Session.GetString("DepartmentName") == "Trung tâm Đào tạo Nội bộ" ? "true" : "false");
 let employees = [], courses = [], charts = {}, currentFilter = 'all', currentProfileId = null, hrCourseContent = null, hrSelectedModuleId = null;
 const AVATAR_COLORS = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899'];
 
@@ -701,14 +731,34 @@ function libraryEscape(value) {
     return String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+async function loadDepartments() {
+    if (!isTrainingCenter) return;
+    try {
+        const depts = await apiFetch('/api/hr/departments');
+        const select = document.getElementById('assignDeptSelect');
+        if (select) {
+            select.innerHTML = '<option value="">-- Chọn phòng ban --</option>' + 
+                depts.map(d => `<option value="${d.departmentId}">${d.departmentName}</option>`).join('');
+        }
+    } catch(e) {
+        console.error('Lỗi tải danh sách phòng ban:', e);
+    }
+}
+
 async function init() {
-    await Promise.all([loadOverview(), loadEmployeesData(), loadCourses(), loadAssignmentsData()]);
-    navigate('hr-overview');
+    if (userRole === 'Trainer' || userRole === 'Lecturer') {
+        await loadCourses();
+        navigate('courses');
+    } else {
+        await Promise.all([loadOverview(), loadEmployeesData(), loadCourses(), loadAssignmentsData(), loadDepartments()]);
+        navigate('hr-overview');
+    }
 }
 
 async function loadOverview() {
     try {
         const s = await apiFetch('/api/hr/stats');
+        window.currentDeptPrefix = s.deptPrefix || 'HR';
         document.getElementById('kpiEmp').textContent = s.totalEmployees;
         document.getElementById('kpiCompleted').textContent = s.completedTrainings;
         document.getElementById('kpiAssigned').textContent = s.totalAssignments;
@@ -741,11 +791,26 @@ function renderCharts(s) {
 }
 function fmtMoney(v) { if(v>=1e9) return (v/1e9).toFixed(1)+'B'; if(v>=1e6) return (v/1e6).toFixed(1)+'M'; return v.toLocaleString(); }
 
+function openCreateEmployeeModal() {
+    const codeEl = document.getElementById('newEmpCode');
+    const nameEl = document.getElementById('newEmpName');
+    const emailEl = document.getElementById('newEmpEmail');
+    
+    if (nameEl) nameEl.value = '';
+    if (emailEl) emailEl.value = '';
+    
+    if (codeEl) {
+        const prefix = window.currentDeptPrefix || 'HR';
+        codeEl.value = prefix + String(Math.floor(1000 + Math.random() * 9000));
+    }
+    openModal('createEmployeeModal');
+}
+
 async function loadEmployeesData() {
     try {
         employees = await apiFetch('/api/hr/employees');
         const sel = document.getElementById('assignEmployee');
-        if(sel) sel.innerHTML = '<option value="">-- Chọn nhân viên --</option>' + employees.filter(e=>e.status==='Active').map(e=>`<option value="${e.userId}">${e.fullName}</option>`).join('');
+        if(sel) sel.innerHTML = '<option value="">-- Chọn nhân viên --</option>' + employees.filter(e=>e.status==='Active' && e.userId !== currentUserId).map(e=>`<option value="${e.userId}">${e.fullName}</option>`).join('');
         renderEmpCards();
         renderAtRisk();
     } catch(e) {}
@@ -840,7 +905,7 @@ async function loadCourses() {
                     </div>
                 </div>
                 ${isOwned ? `<button class="btn btn-sm btn-secondary" onclick="openCourseContentModal(${c.courseId})">🧩 Nội dung</button>` : ''}
-                <button class="btn btn-sm btn-secondary" onclick="openAssignDeptModal(${c.courseId})">📢 Giao phòng</button>
+                <button class="btn btn-sm btn-secondary" onclick="openAssignDeptModal(${c.courseId})">${isTrainingCenter ? '📢 Phân phòng ban' : '📢 Giao phòng'}</button>
                 <button class="btn btn-sm btn-primary" onclick="openAssignModal(${c.courseId})">🎯 Giao cá nhân</button>
             </div>`;
         }).join('');
@@ -935,9 +1000,27 @@ async function generateWithAI() {
 async function submitAssignDept() {
     const courseId = parseInt(document.getElementById('assignDeptCourse').value);
     if(!courseId) return showToast('Vui lòng chọn khóa học','warning');
+    
+    let departmentId = 0;
+    if (isTrainingCenter) {
+        const selectEl = document.getElementById('assignDeptSelect');
+        if (selectEl) {
+            departmentId = parseInt(selectEl.value);
+            if (!departmentId) {
+                return showToast('Vui lòng chọn phòng ban','warning');
+            }
+        }
+    }
+    
     const dueDate = document.getElementById('assignDeptDueDate').value;
-    await apiFetch('/api/hr/assign-dept',{method:'POST',body:JSON.stringify({courseId,departmentId:0,dueDate:dueDate?new Date(dueDate).toISOString():null})});
-    showToast('Đã giao toàn phòng thành công!','success'); closeModal('assignDeptModal'); loadOverview();
+    try {
+        await apiFetch('/api/hr/assign-dept',{method:'POST',body:JSON.stringify({courseId,departmentId,dueDate:dueDate?new Date(dueDate).toISOString():null})});
+        showToast('Đã giao toàn phòng thành công!','success'); 
+        closeModal('assignDeptModal'); 
+        loadOverview();
+    } catch(e) {
+        showToast('Lỗi: ' + e.message, 'error');
+    }
 }
 
 async function submitAssignment() {

@@ -31,6 +31,13 @@ IF COL_LENGTH('dbo.Exams', 'Level') IS NULL
 IF COL_LENGTH('dbo.Exams', 'TargetDepartmentID') IS NULL
     ALTER TABLE dbo.Exams ADD TargetDepartmentID INT NULL;
 
+IF COL_LENGTH('dbo.Exams', 'ModuleID') IS NULL
+BEGIN
+    ALTER TABLE dbo.Exams ADD ModuleID INT NULL;
+    IF OBJECT_ID('dbo.CourseModules', 'U') IS NOT NULL
+        ALTER TABLE dbo.Exams ADD CONSTRAINT FK_Exams_CourseModules FOREIGN KEY (ModuleID) REFERENCES dbo.CourseModules(ModuleID) ON DELETE SET NULL;
+END
+
 IF OBJECT_ID('dbo.LessonAttachments', 'U') IS NULL AND OBJECT_ID('dbo.Lessons', 'U') IS NOT NULL
 BEGIN
     CREATE TABLE dbo.LessonAttachments
