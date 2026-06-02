@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\hieud\\Documents\\DATN_PRO2192\\hethongdaotaonoibo\\KhoaHoc.csproj": {}
+    "C:\\Users\\pc\\Downloads\\daotaonoibo\\hethongdaotaonoibo\\KhoaHoc.csproj": {}
   },
   "projects": {
-    "C:\\Users\\hieud\\Documents\\DATN_PRO2192\\hethongdaotaonoibo\\KhoaHoc.csproj": {
+    "C:\\Users\\pc\\Downloads\\daotaonoibo\\hethongdaotaonoibo\\KhoaHoc.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\hieud\\Documents\\DATN_PRO2192\\hethongdaotaonoibo\\KhoaHoc.csproj",
+        "projectUniqueName": "C:\\Users\\pc\\Downloads\\daotaonoibo\\hethongdaotaonoibo\\KhoaHoc.csproj",
         "projectName": "KhoaHoc",
-        "projectPath": "C:\\Users\\hieud\\Documents\\DATN_PRO2192\\hethongdaotaonoibo\\KhoaHoc.csproj",
-        "packagesPath": "C:\\Users\\hieud\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\hieud\\Documents\\DATN_PRO2192\\hethongdaotaonoibo\\obj\\",
+        "projectPath": "C:\\Users\\pc\\Downloads\\daotaonoibo\\hethongdaotaonoibo\\KhoaHoc.csproj",
+        "packagesPath": "C:\\Users\\pc\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\pc\\Downloads\\daotaonoibo\\hethongdaotaonoibo\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\hieud\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\pc\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
