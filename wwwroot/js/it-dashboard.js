@@ -11,10 +11,12 @@ let activePermissionBoard = [];
 let currentPermissionTarget = { type: 'role', id: null };
 let currentModuleId = null;
 let currentUserPermissionKeys = new Set();
-let documentLibraryData = { courses: [], modules: [], lessons: [], exams: [] };
+let documentLibraryData = { courses: [], modules: [], lessons: [], exams: [], questions: [] };
 let currentLibraryTab = 'modules';
 let lastGeneratedQuestions = [];
 let isLessonVideoDeleted = false;
+let allQuestionPoolData = [];
+let currentQuestionTypeFilter = 'all';
 
 const pagePermissionMap = {
     overview: 'dashboard.view',
@@ -212,7 +214,8 @@ function navigate(page) {
         "newsletter": { title: "Newsletter", sub: "Quản lý đăng ký nhận thông báo" },
         "settings": { title: "Cài đặt hệ thống", sub: "Quản lý tham số cấu hình LMS" },
         "approvals": { title: "Phê duyệt tài liệu", sub: "Xem xét và phê duyệt nội dung đào tạo" },
-        "attendance": { title: "Quản lý điểm danh", sub: "Theo dõi lịch sử điểm danh toàn hệ thống" }
+        "attendance": { title: "Quản lý điểm danh", sub: "Theo dõi lịch sử điểm danh toàn hệ thống" },
+        "exams": { title: "Quản lý bài thi", sub: "Thống kê kết quả thi & Thiết lập cấu trúc đề thi kéo thả" }
     };
 
     if (pageTitles[page]) {
@@ -251,6 +254,7 @@ function navigate(page) {
         loadAttendanceEvents();
         loadAttendanceList();
     }
+    else if (page === 'exams') loadExamsPageList();
 }
 
 function libraryEscape(value) {
@@ -269,8 +273,10 @@ async function loadDocumentLibrary() {
             courses: data.courses || [],
             modules: data.modules || [],
             lessons: data.lessons || [],
-            exams: data.exams || []
+            exams: data.exams || [],
+            questions: data.questions || []
         };
+        allQuestionPoolData = documentLibraryData.questions || [];
         // Refresh department list if empty
         if (!loadedDepartmentsList || !loadedDepartmentsList.length) {
             const depts = await apiFetch('/api/it/departments');
@@ -323,13 +329,20 @@ function switchLibraryTab(tab) {
     const tabs = {
         modules: ['libraryTabModules', 'btn btn-primary'],
         lessons: ['libraryTabLessons', 'btn btn-primary'],
-        exams: ['libraryTabExams', 'btn btn-primary']
+        exams: ['libraryTabExams', 'btn btn-primary'],
+        questions: ['libraryTabQuestions', 'btn btn-primary']
     };
     Object.entries(tabs).forEach(([key, [id, activeClass]]) => {
         const el = document.getElementById(id);
         if (!el) return;
         el.className = key === tab ? activeClass : 'btn btn-secondary';
     });
+
+    const subTabsEl = document.getElementById('questionsSubTabs');
+    if (subTabsEl) {
+        subTabsEl.style.display = tab === 'questions' ? 'flex' : 'none';
+    }
+
     renderDocumentLibrary();
 }
 
@@ -337,13 +350,22 @@ function getFilteredLibraryRows() {
     const keyword = (document.getElementById('librarySearch')?.value || '').trim().toLowerCase();
     const deptId = document.getElementById('libraryDeptFilter')?.value || '';
     const courseId = document.getElementById('libraryCourseFilter')?.value || '';
-    const rows = documentLibraryData[currentLibraryTab] || [];
+    let rows = documentLibraryData[currentLibraryTab] || [];
+    
+    if (currentLibraryTab === 'questions') {
+        if (currentQuestionTypeFilter !== 'all') {
+            rows = rows.filter(q => q.questionType === currentQuestionTypeFilter);
+        }
+    }
+    
     return rows.filter(row => {
-        const rowDept = String(row.targetDepartmentId || row.ownerDeptId || row.departmentId || '');
-        const matchesDept = !deptId || rowDept === deptId;
-        const matchesCourse = !courseId || String(row.courseId || row.ownerCourseId || '') === courseId;
+        if (currentLibraryTab !== 'questions') {
+            const rowDept = String(row.targetDepartmentId || row.ownerDeptId || row.departmentId || '');
+            const matchesDept = !deptId || rowDept === deptId;
+            const matchesCourse = !courseId || String(row.courseId || row.ownerCourseId || '') === courseId;
+            if (!matchesDept || !matchesCourse) return false;
+        }
         
-        if (!matchesDept || !matchesCourse) return false;
         if (!keyword) return true;
 
         return [
@@ -352,7 +374,8 @@ function getFilteredLibraryRows() {
             row.courseTitle,
             row.courseCode,
             row.moduleTitle,
-            row.contentType
+            row.contentType,
+            row.questionText
         ].some(value => String(value || '').toLowerCase().includes(keyword));
     });
 }
@@ -360,7 +383,7 @@ function getFilteredLibraryRows() {
 function renderDocumentLibrary() {
     const createBtn = document.getElementById('libraryCreateBtn');
     if (createBtn) {
-        createBtn.textContent = currentLibraryTab === 'modules' ? '➕ Tạo Chương Mới' : currentLibraryTab === 'lessons' ? '➕ Tạo Bài Giảng Mới' : '➕ Tạo Quiz Mới';
+        createBtn.textContent = currentLibraryTab === 'modules' ? '➕ Tạo Chương Mới' : currentLibraryTab === 'lessons' ? '➕ Tạo Bài Giảng Mới' : currentLibraryTab === 'exams' ? '➕ Tạo Quiz Mới' : '➕ Tạo Câu Hỏi Mới';
     }
 
     const rows = getFilteredLibraryRows();
@@ -419,33 +442,77 @@ function renderDocumentLibrary() {
         return;
     }
 
-    head.innerHTML = '<tr><th style="width:50px">ID</th><th>Tiêu đề Quiz</th><th style="width:100px">Level</th><th>Sử dụng trong</th><th style="width:200px">Cấu hình</th><th style="width:240px; text-align:right">Thao tác</th></tr>';
-    body.innerHTML = rows.length ? rows.map(row => `
-        <tr>
-            <td style="color:#64748b; font-family:monospace">${row.examId}</td>
-            <td>
-                <div style="font-weight:700; color:#1e293b">${libraryEscape(row.examTitle)}</div>
-                <div style="font-size:11px; color:#64748b; margin-top:2px">Cập nhật: ${fmtDate(row.createdAt)}</div>
-            </td>
-            <td>${row.level ? `<span class="badge badge-info" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd">Level ${row.level}</span>` : '<span style="color:#94a3b8">--</span>'}</td>
-            <td><span class="badge" style="background:#fff7ed; color:#c2410c; border:1px solid #ffedd5">${libraryEscape(row.courseTitle || 'Chưa gán')}${row.courseCode || row.CourseCode ? ` (${row.courseCode || row.CourseCode})` : ''}</span></td>
-            <td>
-                <div style="display:flex;gap:4px;flex-wrap:wrap">
-                    <span class="badge badge-info" style="font-size:10px" title="Thời gian">${row.durationMinutes || 0} phút</span>
-                    <span class="badge badge-purple" style="font-size:10px" title="Điểm đỗ">Đỗ ${row.passScore || 0}</span>
-                    <span class="badge badge-blue" style="font-size:10px; cursor:pointer" onclick="openExamQuestionsManagementModal(${row.examId})" title="Quản lý câu hỏi">📂 ${row.questionsCount || 0} câu</span>
-                </div>
-            </td>
-            <td>
-                <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center;">
-                    <button class="btn btn-sm" style="background: linear-gradient(135deg, #fef3c7, #fde68a); color:#92400e; border:1px solid #fcd34d; font-weight:800; padding:5px 10px; font-size:11px; box-shadow: 0 1px 2px rgba(0,0,0,0.05)" onclick="suggestMultipleQuestionsAI(${row.examId})" title="AI Gợi ý bộ đề">🚀 AI</button>
-                    <button class="btn btn-primary btn-sm" style="padding:5px 12px; background:#2563eb;" onclick="openExamQuestionsManagementModal(${row.examId})" title="Thiết kế câu hỏi">➕ Tạo</button>
-                    <button class="btn btn-secondary btn-sm" style="padding:5px 12px;" onclick="openEditExamModal(${row.examId})" title="Sửa thông tin">📝</button>
-                    <button class="btn btn-danger btn-sm" style="padding:5px 12px;" onclick="deleteExam(${row.examId})" title="Xóa Quiz">🗑️</button>
-                </div>
-            </td>
-        </tr>
-    `).join('') : '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px">Chưa có quiz nào. Quý khách vui lòng nhấn "Tạo Quiz Mới" ở trên.</td></tr>';
+    if (currentLibraryTab === 'questions') {
+        head.innerHTML = '<tr><th style="width:50px">ID</th><th>Nội dung câu hỏi</th><th style="width:150px">Phân loại</th><th style="width:100px">Độ khó</th><th style="width:240px; text-align:right">Thao tác</th></tr>';
+        body.innerHTML = rows.length ? rows.map(row => {
+            let optionsText = '';
+            if (row.questionType === 'MultipleChoice' && row.options) {
+                optionsText = `<div style="margin-top:6px; font-size:12px; color:#475569">
+                    ${row.options.map(o => `<span style="margin-right:12px; padding:2px 6px; border-radius:4px; background:${o.isCorrect ? '#dcfce7; color:#166534' : '#f1f5f9; color:#475569'}">${o.isCorrect ? '✓ ' : ''}${libraryEscape(o.optionText)}</span>`).join('')}
+                </div>`;
+            } else if (row.questionType === 'FillInTheBlank' && row.options) {
+                const correctAnswers = row.options.filter(o => o.isCorrect).map(o => o.optionText);
+                optionsText = `<div style="margin-top:6px; font-size:12px; color:#4a044e">
+                    <strong>Từ khóa đúng:</strong> <span style="background:#fdf4ff; border:1px dashed #e879f9; padding:2px 6px; border-radius:4px">${libraryEscape(correctAnswers.join(' / '))}</span>
+                </div>`;
+            } else if (row.questionType === 'Essay') {
+                optionsText = `<div style="margin-top:6px; font-size:12px; color:#475569">
+                    <em>(Học viên sẽ nhập văn bản tự luận khi làm bài)</em>
+                </div>`;
+            }
+
+            const typeLabel = row.questionType === 'MultipleChoice' ? 'Trắc nghiệm' : row.questionType === 'Essay' ? 'Tự luận' : 'Điền từ';
+            const typeIcon = row.questionType === 'MultipleChoice' ? '☑️' : row.questionType === 'Essay' ? '✍️' : '✏️';
+
+            return `
+            <tr>
+                <td style="color:#64748b; font-family:monospace">${row.questionId}</td>
+                <td>
+                    <strong>${libraryEscape(row.questionText)}</strong>
+                    ${optionsText}
+                </td>
+                <td><span class="badge badge-info">${typeIcon} ${typeLabel}</span></td>
+                <td><span class="badge badge-secondary">${row.difficulty || 'Medium'}</span></td>
+                <td>
+                    <div style="display:flex; gap:8px; justify-content:flex-end">
+                        <button class="btn btn-secondary btn-sm" onclick="openEditQuestionModal(${row.questionId})">Sửa</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteQuestion(${row.questionId})">Xóa</button>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('') : '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:24px">Chưa có câu hỏi nào. Quý khách vui lòng nhấn "Tạo Câu Hỏi Mới" ở trên.</td></tr>';
+        return;
+    }
+
+    if (currentLibraryTab === 'exams') {
+        head.innerHTML = '<tr><th style="width:50px">ID</th><th>Tiêu đề Quiz</th><th style="width:100px">Level</th><th>Sử dụng trong</th><th style="width:200px">Cấu hình</th><th style="width:240px; text-align:right">Thao tác</th></tr>';
+        body.innerHTML = rows.length ? rows.map(row => `
+            <tr>
+                <td style="color:#64748b; font-family:monospace">${row.examId}</td>
+                <td>
+                    <div style="font-weight:700; color:#1e293b">${libraryEscape(row.examTitle)}</div>
+                    <div style="font-size:11px; color:#64748b; margin-top:2px">Cập nhật: ${fmtDate(row.createdAt)}</div>
+                </td>
+                <td>${row.level ? `<span class="badge badge-info" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd">Level ${row.level}</span>` : '<span style="color:#94a3b8">--</span>'}</td>
+                <td><span class="badge" style="background:#fff7ed; color:#c2410c; border:1px solid #ffedd5">${libraryEscape(row.courseTitle || 'Chưa gán')}${row.courseCode || row.CourseCode ? ` (${row.courseCode || row.CourseCode})` : ''}</span></td>
+                <td>
+                    <div style="display:flex;gap:4px;flex-wrap:wrap">
+                        <span class="badge badge-info" style="font-size:10px" title="Thời gian">${row.durationMinutes || 0} phút</span>
+                        <span class="badge badge-purple" style="font-size:10px" title="Điểm đỗ">Đỗ ${row.passScore || 0}</span>
+                        <span class="badge badge-blue" style="font-size:10px; cursor:pointer" onclick="openExamQuestionsManagementModal(${row.examId})" title="Quản lý câu hỏi">📂 ${row.questionsCount || 0} câu</span>
+                    </div>
+                </td>
+                <td>
+                    <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center;">
+                        <button class="btn btn-sm" style="background: linear-gradient(135deg, #fef3c7, #fde68a); color:#92400e; border:1px solid #fcd34d; font-weight:800; padding:5px 10px; font-size:11px; box-shadow: 0 1px 2px rgba(0,0,0,0.05)" onclick="suggestMultipleQuestionsAI(${row.examId})" title="AI Gợi ý bộ đề">🚀 AI</button>
+                        <button class="btn btn-primary btn-sm" style="padding:5px 12px; background:#2563eb;" onclick="openExamQuestionsManagementModal(${row.examId})" title="Thiết kế câu hỏi">➕ Tạo</button>
+                        <button class="btn btn-secondary btn-sm" style="padding:5px 12px;" onclick="openEditExamModal(${row.examId})" title="Sửa thông tin">📝</button>
+                        <button class="btn btn-danger btn-sm" style="padding:5px 12px;" onclick="deleteExam(${row.examId})" title="Xóa Quiz">🗑️</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('') : '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px">Chưa có quiz nào. Quý khách vui lòng nhấn "Tạo Quiz Mới" ở trên.</td></tr>';
+    }
 }
 
 function openLibraryCreateModal() {
@@ -502,6 +569,11 @@ function openLibraryCreateModal() {
             }
             
             openModal('libraryExamModal');
+            return;
+        }
+
+        if (currentLibraryTab === 'questions') {
+            openCreateQuestionModal();
             return;
         }
     } catch (e) {
@@ -744,6 +816,10 @@ async function submitLibraryExam() {
             courseId: 0,
             refreshCourseContent: true
         });
+
+        if (typeof loadExamsPageList === 'function') {
+            await loadExamsPageList();
+        }
 
     } catch (e) {
         console.error('CRITICAL ERROR in submitLibraryExam:', e);
@@ -3229,8 +3305,9 @@ async function deleteModule(moduleId) {
 // EXAM - EDIT & DELETE
 // ============================================================
 function openEditExamModal(examId) {
-    const exam = currentCourseContentParams.exams.find(e => e.examId === examId)
-        || documentLibraryData.exams.find(e => e.examId === examId);
+    const exam = (currentCourseContentParams?.exams || []).find(e => e.examId === examId)
+        || (documentLibraryData?.exams || []).find(e => e.examId === examId)
+        || (loadedExamsList || []).find(e => e.examId === examId);
     if (!exam) return;
     document.getElementById('editExamId').value = examId;
     document.getElementById('editExamTitleInput').value = exam.examTitle || '';
@@ -3238,8 +3315,8 @@ function openEditExamModal(examId) {
     document.getElementById('editExamDurationInput').value = exam.durationMinutes || 30;
     document.getElementById('editExamPassScoreInput').value = exam.passScore || 50;
     document.getElementById('editExamMaxAttemptsInput').value = exam.maxAttempts || '';
-    document.getElementById('editExamStartDateInput').value = exam.startDate ? exam.startDate.substring(0, 10) : '';
-    document.getElementById('editExamEndDateInput').value = exam.endDate ? exam.endDate.substring(0, 10) : '';
+    document.getElementById('editExamStartDateInput').value = exam.startDate ? exam.startDate.substring(0, 16) : '';
+    document.getElementById('editExamEndDateInput').value = exam.endDate ? exam.endDate.substring(0, 16) : '';
     const deptOpts = '<option value="">-- Tất cả phòng ban --</option>' + departments.map(d => `<option value="${d.departmentId}" ${d.departmentId == exam.targetDepartmentId ? 'selected' : ''}>${d.departmentName}</option>`).join('');
     document.getElementById('editExamTargetDeptInput').innerHTML = deptOpts;
     openModal('editExamModal');
@@ -3262,8 +3339,9 @@ async function submitEditExam() {
         await apiFetch(`/api/it/exams/${id}`, { method: 'PUT', body: JSON.stringify(body) });
         closeModal('editExamModal');
         showToast('Cập nhật bài kiểm tra thành công!');
-        loadCourseContent();
+        if (typeof loadCourseContent === 'function') loadCourseContent();
         await loadDocumentLibrary();
+        if (typeof loadExamsPageList === 'function') loadExamsPageList();
     } catch(e) { showToast(e.message || 'Lỗi', 'error'); }
 }
 
@@ -3272,8 +3350,9 @@ async function deleteExam(examId) {
     try {
         await apiFetch(`/api/it/exams/${examId}`, { method: 'DELETE' });
         showToast('Đã xóa bài kiểm tra!', 'warning');
-        loadCourseContent();
+        if (typeof loadCourseContent === 'function') loadCourseContent();
         await loadDocumentLibrary();
+        if (typeof loadExamsPageList === 'function') loadExamsPageList();
     } catch(e) { showToast(e.message || 'Lỗi', 'error'); }
 }
 
@@ -3968,5 +4047,482 @@ async function submitBulkDeptUpdate() {
 }
 
 
+let loadedExamsList = [];
+async function loadExamsPageList() {
+    try {
+        const prefix = (window.location.pathname.toLowerCase().includes('/it') || window.location.pathname.toLowerCase().includes('/it/')) ? '/api/it' : '/api/hr';
+        const data = await apiFetch(`${prefix}/exams-with-stats`);
+        loadedExamsList = data || [];
+        renderExamsPageList();
+    } catch (e) {
+        showToast('Không tải được danh sách bài thi: ' + e.message, 'error');
+    }
+}
+
+function renderExamsPageList() {
+    const keyword = (document.getElementById('examsSearch')?.value || '').trim().toLowerCase();
+    const tbody = document.getElementById('examsTableBody');
+    if (!tbody) return;
+
+    let filtered = loadedExamsList;
+    if (keyword) {
+        filtered = filtered.filter(e => 
+            String(e.examTitle || '').toLowerCase().includes(keyword) ||
+            String(e.courseTitle || '').toLowerCase().includes(keyword)
+        );
+    }
+
+    tbody.innerHTML = filtered.length ? filtered.map(row => `
+        <tr>
+            <td style="color:#64748b; font-family:monospace">${row.examId}</td>
+            <td><strong>${libraryEscape(row.examTitle)}</strong></td>
+            <td><span class="badge badge-blue">${libraryEscape(row.courseTitle || 'Chưa gán')}</span></td>
+            <td><span class="badge badge-purple">${row.questionsCount || 0} câu</span></td>
+            <td>${row.durationMinutes || 0} phút</td>
+            <td>${row.passScore || 0}%</td>
+            <td><span style="font-weight:700; color:#166534; cursor:pointer;" onclick="openExamParticipants(${row.examId}, 'Đạt')" title="Xem chi tiết đạt">✓ ${row.passedCount || 0}</span></td>
+            <td><span style="font-weight:700; color:#991b1b; cursor:pointer;" onclick="openExamParticipants(${row.examId}, 'Không đạt')" title="Xem chi tiết không đạt">✗ ${row.failedCount || 0}</span></td>
+            <td>
+                <div style="display:flex; gap:8px; justify-content:flex-end">
+                    <button class="btn btn-secondary btn-sm" onclick="openExamParticipants(${row.examId})">👥 Chi tiết</button>
+                    <button class="btn btn-primary btn-sm" onclick="openExamBuilder(${row.examId})">🧩 Cấu trúc</button>
+                    <button class="btn btn-secondary btn-sm" onclick="openEditExamModal(${row.examId})" title="Chỉnh sửa thông tin">📝 Sửa</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteExam(${row.examId})" title="Xóa bài thi">🗑️ Xóa</button>
+                </div>
+            </td>
+        </tr>
+    `).join('') : '<tr><td colspan="9" style="text-align:center; color:#94a3b8; padding:24px">Không tìm thấy bài thi nào.</td></tr>';
+}
+
+let builderActiveExamQuestions = [];
+let builderExamId = null;
+async function openExamBuilder(examId) {
+    builderExamId = examId;
+    document.getElementById('builderExamId').value = examId;
+    
+    const exam = loadedExamsList.find(e => e.examId === examId);
+    document.getElementById('examBuilderTitle').textContent = `Xây dựng cấu trúc bài thi: ${exam ? exam.examTitle : ''}`;
+
+    const prefix = (window.location.pathname.toLowerCase().includes('/it') || window.location.pathname.toLowerCase().includes('/it/')) ? '/api/it' : '/api/hr';
+
+    if (!allQuestionPoolData.length) {
+        try {
+            allQuestionPoolData = await apiFetch(`${prefix}/questions-pool`);
+        } catch (e) {
+            showToast('Không tải được ngân hàng câu hỏi: ' + e.message, 'error');
+        }
+    }
+
+    try {
+        const questions = await apiFetch(`${prefix}/exams/${examId}/questions`);
+        builderActiveExamQuestions = questions.map(q => ({
+            questionId: q.questionId,
+            questionText: q.questionText,
+            questionType: q.questionType || 'MultipleChoice',
+            points: q.points || 10
+        }));
+    } catch (e) {
+        showToast('Không tải được câu hỏi của bài thi: ' + e.message, 'error');
+        builderActiveExamQuestions = [];
+    }
+
+    renderExamBuilderPool();
+    renderExamBuilderStructure();
+    openModal('examBuilderModal');
+}
+
+function renderExamBuilderPool() {
+    const keyword = (document.getElementById('examBuilderPoolSearch')?.value || '').trim().toLowerCase();
+    
+    const mcContainer = document.getElementById('builderPoolMCList');
+    const essayContainer = document.getElementById('builderPoolEssayList');
+    const fitbContainer = document.getElementById('builderPoolFITBList');
+
+    if (!mcContainer || !essayContainer || !fitbContainer) return;
+
+    let pool = allQuestionPoolData || [];
+    if (keyword) {
+        pool = pool.filter(q => String(q.questionText || '').toLowerCase().includes(keyword));
+    }
+
+    const existingIds = new Set(builderActiveExamQuestions.map(q => q.questionId));
+    pool = pool.filter(q => !existingIds.has(q.questionId));
+
+    const renderItem = (q) => `
+        <div class="builder-item" draggable="true" ondragstart="handleExamDragStart(event, ${q.questionId}, '${q.questionText.replace(/'/g, "\\'")}', '${q.questionType}')" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#fff; border:1px solid #e2e8f0; border-radius:6px; margin-bottom:6px; cursor:grab;">
+            <div style="flex:1; font-size:12px; font-weight:600; color:#334155; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ${libraryEscape(q.questionText)}
+            </div>
+            <button class="btn btn-secondary btn-sm" style="padding:2px 6px; font-size:11px; margin-left:8px;" onclick="addQuestionToExamStructure(${q.questionId})">➕</button>
+        </div>
+    `;
+
+    const mcQuestions = pool.filter(q => q.questionType === 'MultipleChoice');
+    const essayQuestions = pool.filter(q => q.questionType === 'Essay');
+    const fitbQuestions = pool.filter(q => q.questionType === 'FillInTheBlank');
+
+    mcContainer.innerHTML = mcQuestions.length ? mcQuestions.map(renderItem).join('') : '<div style="font-size:11px; color:#94a3b8; text-align:center; padding:12px;">Trống</div>';
+    essayContainer.innerHTML = essayQuestions.length ? essayQuestions.map(renderItem).join('') : '<div style="font-size:11px; color:#94a3b8; text-align:center; padding:12px;">Trống</div>';
+    fitbContainer.innerHTML = fitbQuestions.length ? fitbQuestions.map(renderItem).join('') : '<div style="font-size:11px; color:#94a3b8; text-align:center; padding:12px;">Trống</div>';
+}
+
+function renderExamBuilderStructure() {
+    const list = document.getElementById('examBuilderStructureList');
+    const emptyMsg = document.getElementById('examBuilderEmptyMessage');
+    if (!list || !emptyMsg) return;
+
+    if (!builderActiveExamQuestions.length) {
+        list.innerHTML = '';
+        emptyMsg.style.display = 'block';
+        return;
+    }
+
+    emptyMsg.style.display = 'none';
+    list.innerHTML = builderActiveExamQuestions.map((q, idx) => {
+        const typeLabel = q.questionType === 'MultipleChoice' ? 'Trắc nghiệm' : q.questionType === 'Essay' ? 'Tự luận' : 'Điền từ';
+        const typeBadge = q.questionType === 'MultipleChoice' ? 'badge-blue' : q.questionType === 'Essay' ? 'badge-purple' : 'badge-orange';
+        return `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:#fff; border:1px solid #cbd5e1; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.05)">
+                <div style="flex:1; padding-right:16px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-weight:700; color:#475569; font-family:monospace; font-size:13px;">#${idx+1}</span>
+                        <span class="badge ${typeBadge}" style="font-size:10px;">${typeLabel}</span>
+                    </div>
+                    <div style="font-weight:600; color:#1e293b; font-size:13px; margin-top:4px;">${libraryEscape(q.questionText)}</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="font-size:11px; font-weight:600; color:#64748b;">Điểm:</span>
+                        <input type="number" class="form-input" style="width:60px; height:28px; padding:2px 6px; font-size:12px; text-align:center;" value="${q.points}" onchange="updateQuestionPoints(${q.questionId}, this.value)">
+                    </div>
+                    <button class="btn btn-danger btn-sm" style="padding:4px 8px;" onclick="removeQuestionFromExamStructure(${q.questionId})">Gỡ</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function updateQuestionPoints(questionId, value) {
+    const val = parseFloat(value) || 0;
+    const q = builderActiveExamQuestions.find(x => x.questionId === questionId);
+    if (q) q.points = val;
+}
+
+function removeQuestionFromExamStructure(questionId) {
+    builderActiveExamQuestions = builderActiveExamQuestions.filter(q => q.questionId !== questionId);
+    renderExamBuilderPool();
+    renderExamBuilderStructure();
+}
+
+function addQuestionToExamStructure(questionId) {
+    const qPool = (allQuestionPoolData || []).find(x => x.questionId === questionId);
+    if (!qPool) return;
+
+    builderActiveExamQuestions.push({
+        questionId: qPool.questionId,
+        questionText: qPool.questionText,
+        questionType: qPool.questionType || 'MultipleChoice',
+        points: 10
+    });
+
+    renderExamBuilderPool();
+    renderExamBuilderStructure();
+}
+
+let examDragData = null;
+function handleExamDragStart(e, id, text, type) {
+    examDragData = { id, text, type };
+    e.dataTransfer.setData('text/plain', id);
+}
+function handleExamDragOver(e) {
+    e.preventDefault();
+    if(e.currentTarget) e.currentTarget.classList.add('drop-zone-active');
+}
+function handleExamDragLeave(e) {
+    if (e.currentTarget) e.currentTarget.classList.remove('drop-zone-active');
+}
+function handleExamDrop(e) {
+    e.preventDefault();
+    handleExamDragLeave(e);
+    if (!examDragData) return;
+    addQuestionToExamStructure(examDragData.id);
+    examDragData = null;
+}
+
+async function saveExamStructureClick() {
+    if (!builderExamId) return;
+
+    try {
+        const prefix = (window.location.pathname.toLowerCase().includes('/it') || window.location.pathname.toLowerCase().includes('/it/')) ? '/api/it' : '/api/hr';
+        const ids = builderActiveExamQuestions.map(q => q.questionId);
+        await apiFetch(`${prefix}/exams/${builderExamId}/save-structure`, {
+            method: 'POST',
+            body: JSON.stringify(ids)
+        });
+
+        showToast('Lưu cấu trúc đề thi thành công.');
+        closeModal('examBuilderModal');
+        await loadDocumentLibrary();
+        if (typeof loadExamsPageList === 'function') loadExamsPageList();
+    } catch (e) {
+        showToast('Lỗi lưu cấu trúc: ' + e.message, 'danger');
+    }
+}
+
+function openCreateQuestionModal() {
+    document.getElementById('questionEditModalTitle').textContent = 'Tạo câu hỏi mới';
+    document.getElementById('editQuestionId').value = '';
+    document.getElementById('editQuestionTypeInput').value = 'MultipleChoice';
+    document.getElementById('editQuestionTextInput').value = '';
+    document.getElementById('editQuestionDifficultyInput').value = 'Medium';
+    
+    document.getElementById('questionOptionsEditorRows').innerHTML = '';
+    toggleQuestionOptionsEditor();
+    
+    addQuestionOptionEditorRow('', false);
+    addQuestionOptionEditorRow('', false);
+    
+    openModal('questionPoolEditModal');
+}
+
+async function openEditQuestionModal(id) {
+    document.getElementById('questionEditModalTitle').textContent = 'Chỉnh sửa câu hỏi';
+    document.getElementById('editQuestionId').value = id;
+
+    const q = (allQuestionPoolData || []).find(x => x.questionId === id);
+    if (!q) return;
+
+    document.getElementById('editQuestionTypeInput').value = q.questionType || 'MultipleChoice';
+    document.getElementById('editQuestionTextInput').value = q.questionText || '';
+    document.getElementById('editQuestionDifficultyInput').value = q.difficulty || 'Medium';
+
+    const container = document.getElementById('questionOptionsEditorRows');
+    container.innerHTML = '';
+    
+    toggleQuestionOptionsEditor();
+
+    if (q.options && q.options.length) {
+        q.options.forEach(o => {
+            addQuestionOptionEditorRow(o.optionText, o.isCorrect);
+        });
+    } else {
+        addQuestionOptionEditorRow('', false);
+        addQuestionOptionEditorRow('', false);
+    }
+
+    openModal('questionPoolEditModal');
+}
+
+function toggleQuestionOptionsEditor() {
+    const type = document.getElementById('editQuestionTypeInput').value;
+    const area = document.getElementById('questionOptionsEditorArea');
+    const label = document.getElementById('questionOptionsLabel');
+    if (!area || !label) return;
+
+    if (type === 'Essay') {
+        area.style.display = 'none';
+    } else {
+        area.style.display = 'block';
+        if (type === 'FillInTheBlank') {
+            label.textContent = 'Các từ khóa đúng (Học viên điền đúng 1 trong các từ này sẽ được tính điểm)';
+        } else {
+            label.textContent = 'Các lựa chọn trả lời';
+        }
+    }
+}
+
+function addQuestionOptionEditorRow(text = '', isCorrect = false) {
+    const container = document.getElementById('questionOptionsEditorRows');
+    if (!container) return;
+
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.gap = '10px';
+    row.style.alignItems = 'center';
+    row.className = 'option-row';
+
+    row.innerHTML = `
+        <input type="checkbox" class="option-correct-cb" ${isCorrect ? 'checked' : ''} style="width:20px; height:20px; cursor:pointer;" title="Đúng/Sai">
+        <input type="text" class="form-input option-text-input" style="flex:1;" value="${libraryEscape(text)}" placeholder="Nhập đáp án...">
+        <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()" style="padding:6px 10px;">🗑️</button>
+    `;
+    container.appendChild(row);
+}
+
+async function submitQuestionPoolSave() {
+    const id = document.getElementById('editQuestionId').value;
+    const type = document.getElementById('editQuestionTypeInput').value;
+    const text = document.getElementById('editQuestionTextInput').value;
+    const difficulty = document.getElementById('editQuestionDifficultyInput').value;
+
+    if (!text.trim()) {
+        return showToast('Vui lòng nhập nội dung câu hỏi!', 'warning');
+    }
+
+    const options = [];
+    if (type !== 'Essay') {
+        const rows = document.querySelectorAll('#questionOptionsEditorRows .option-row');
+        rows.forEach(r => {
+            const cb = r.querySelector('.option-correct-cb');
+            const txt = r.querySelector('.option-text-input');
+            if (txt && txt.value.trim()) {
+                options.push({
+                    optionText: txt.value.trim(),
+                    isCorrect: cb ? cb.checked : false
+                });
+            }
+        });
+
+        if (options.length === 0) {
+            return showToast('Vui lòng nhập ít nhất 1 đáp án/từ khóa đúng!', 'warning');
+        }
+        
+        if (type === 'MultipleChoice' && !options.some(o => o.isCorrect)) {
+            return showToast('Vui lòng chọn ít nhất 1 đáp án đúng làm Key!', 'warning');
+        }
+    }
+
+    const body = {
+        questionText: text.trim(),
+        questionType: type,
+        difficulty: difficulty,
+        options: options
+    };
+
+    try {
+        const prefix = (window.location.pathname.toLowerCase().includes('/it') || window.location.pathname.toLowerCase().includes('/it/')) ? '/api/it' : '/api/hr';
+        if (id) {
+            await apiFetch(`${prefix}/questions-pool/${id}`, {
+                method: 'PUT',
+                body: JSON.stringify(body)
+            });
+            showToast('Cập nhật câu hỏi thành công.');
+        } else {
+            await apiFetch(`${prefix}/questions-pool`, {
+                method: 'POST',
+                body: JSON.stringify(body)
+            });
+            showToast('Tạo câu hỏi mới thành công.');
+        }
+
+        closeModal('questionPoolEditModal');
+        await loadDocumentLibrary();
+        if (typeof loadExamsPageList === 'function') loadExamsPageList();
+    } catch (e) {
+        showToast('Lỗi lưu câu hỏi: ' + e.message, 'danger');
+    }
+}
+
+async function deleteQuestion(id) {
+    if (!confirm('Bạn có chắc chắn muốn xóa câu hỏi này khỏi Ngân hàng câu hỏi? Điều này cũng sẽ gỡ câu hỏi khỏi tất cả các bài thi hiện có.')) return;
+
+    try {
+        const prefix = (window.location.pathname.toLowerCase().includes('/it') || window.location.pathname.toLowerCase().includes('/it/')) ? '/api/it' : '/api/hr';
+        await apiFetch(`${prefix}/questions-pool/${id}`, {
+            method: 'DELETE'
+        });
+        showToast('Đã xóa câu hỏi khỏi Ngân hàng.');
+        await loadDocumentLibrary();
+        if (typeof loadExamsPageList === 'function') loadExamsPageList();
+    } catch (e) {
+        showToast('Lỗi xóa câu hỏi: ' + e.message, 'danger');
+    }
+}
+
+function switchQuestionSubTab(type) {
+    currentQuestionTypeFilter = type;
+    const buttons = {
+        all: 'qSubTabAll',
+        MultipleChoice: 'qSubTabMC',
+        Essay: 'qSubTabEssay',
+        FillInTheBlank: 'qSubTabFITB'
+    };
+    Object.entries(buttons).forEach(([key, id]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.className = key === type ? 'btn btn-primary btn-sm question-sub-tab' : 'btn btn-secondary btn-sm question-sub-tab';
+    });
+    renderDocumentLibrary();
+}
+
+let loadedParticipants = [];
+async function openExamParticipants(examId, initialFilter = '') {
+    const prefix = (window.location.pathname.toLowerCase().includes('/it') || window.location.pathname.toLowerCase().includes('/it/')) ? '/api/it' : '/api/hr';
+    
+    const exam = loadedExamsList.find(e => e.examId === examId);
+    document.getElementById('participantsModalTitle').textContent = `Chi tiết kết quả thi: ${exam ? exam.examTitle : ''}`;
+    
+    document.getElementById('participantsSearch').value = '';
+    document.getElementById('participantsStatusFilter').value = initialFilter;
+    document.getElementById('participantsTableBody').innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;"><span class="spinner-small"></span> Đang tải...</td></tr>';
+    
+    openModal('examParticipantsModal');
+    
+    try {
+        const data = await apiFetch(`${prefix}/exams/${examId}/participants`);
+        loadedParticipants = data || [];
+        renderParticipantsList();
+    } catch (e) {
+        showToast('Không tải được danh sách kết quả: ' + e.message, 'danger');
+        closeModal('examParticipantsModal');
+    }
+}
+
+function renderParticipantsList() {
+    const searchVal = (document.getElementById('participantsSearch')?.value || '').trim().toLowerCase();
+    const statusVal = document.getElementById('participantsStatusFilter')?.value || '';
+    const tbody = document.getElementById('participantsTableBody');
+    if (!tbody) return;
+    
+    let filtered = loadedParticipants;
+    if (searchVal) {
+        filtered = filtered.filter(p => String(p.fullName || '').toLowerCase().includes(searchVal) || String(p.employeeCode || '').toLowerCase().includes(searchVal));
+    }
+    if (statusVal) {
+        filtered = filtered.filter(p => p.statusText === statusVal);
+    }
+    
+    tbody.innerHTML = filtered.length ? filtered.map(p => {
+        const scoreText = p.score !== null && p.score !== undefined ? `${p.score}%` : '--';
+        const dateText = p.endTime ? fmtDateTime(p.endTime) : '--';
+        
+        let badgeClass = 'badge-secondary';
+        if (p.statusClass === 'success') badgeClass = 'badge-success';
+        if (p.statusClass === 'danger') badgeClass = 'badge-danger';
+        if (p.statusClass === 'warning') badgeClass = 'badge-info';
+
+        return `
+            <tr>
+                <td style="font-family:monospace; color:#64748b">${libraryEscape(p.employeeCode || '--')}</td>
+                <td><strong>${libraryEscape(p.fullName)}</strong></td>
+                <td><span class="badge badge-blue" style="background:#eff6ff; color:#1d4ed8">${libraryEscape(p.departmentName)}</span></td>
+                <td style="font-weight:700">${scoreText}</td>
+                <td><span class="badge ${badgeClass}">${p.statusText}</span></td>
+                <td style="font-size:12px; color:#64748b">${dateText}</td>
+            </tr>`;
+    }).join('') : '<tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:24px">Không có kết quả nào phù hợp.</td></tr>';
+}
+
+function openCreateExamModal() {
+    const eId = document.getElementById('libraryExamId'); if (eId) eId.value = '';
+    const eTitle = document.getElementById('libraryExamTitleInput'); if (eTitle) eTitle.value = '';
+    const eLevel = document.getElementById('libraryExamLevelInput'); if (eLevel) eLevel.value = '';
+    const eDuration = document.getElementById('libraryExamDurationInput'); if (eDuration) eDuration.value = 30;
+    const ePass = document.getElementById('libraryExamPassScoreInput'); if (ePass) ePass.value = 50;
+    const eMax = document.getElementById('libraryExamMaxAttemptsInput'); if (eMax) eMax.value = '';
+    const eStart = document.getElementById('libraryExamStartDateInput'); if (eStart) eStart.value = '';
+    const eEnd = document.getElementById('libraryExamEndDateInput'); if (eEnd) eEnd.value = '';
+    
+    const deptInput = document.getElementById('libraryExamTargetDeptInput');
+    if (deptInput) {
+        apiFetch('/api/it/departments')
+            .then(depts => {
+                deptInput.innerHTML = '<option value="">-- Tất cả phòng ban --</option>' + 
+                    depts.map(d => `<option value="${d.departmentId}">${d.departmentName}</option>`).join('');
+            })
+            .catch(err => console.error(err));
+    }
+    openModal('libraryExamModal');
+}
 
 document.addEventListener('DOMContentLoaded', init);

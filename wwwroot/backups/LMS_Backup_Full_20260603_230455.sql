@@ -1,6 +1,6 @@
 ﻿-- ========================================================
 -- LMS Corporate Database Backup SQL Dump
--- Generated At: 2026-05-30 19:40:43
+-- Generated At: 2026-06-03 23:04:55
 -- Host database: db48874.public.databaseasp.net
 -- ========================================================
 
@@ -49,12 +49,12 @@ SET IDENTITY_INSERT [JobTitles] OFF;
 
 -- Table: Users
 SET IDENTITY_INSERT [Users] ON;
-INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (54, N'GD0001', N'hunglmgd0001', N'Lê Minh Hùng', N'hunglmgd0001@basau.net', 20, 24, 0, 1, N'Active', NULL);
-INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (55, N'GD0002', N'longtdgd0002', N'Trần Đức Long', N'longtdgd0002@basau.net', 20, 25, 0, 0, N'Active', NULL);
-INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (56, N'HR0001', N'tuyettthr0001', N'Trần Thị Tuyết', N'tuyettthr0001@basau.net', 21, 26, 0, 1, N'Active', '2026-05-30 10:11:26.427');
+INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (54, N'GD0001', N'hunglmgd0001', N'Lê Minh Hùng', N'hunglmgd0001@basau.net', 20, 24, 0, 1, N'Active', '2026-06-01 08:55:06.407');
+INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (55, N'GD0002', N'longtdgd0002', N'Trần Đức Long', N'longtdgd0002@basau.net', 20, 25, 0, 0, N'Active', '2026-06-03 22:44:28.027');
+INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (56, N'HR0001', N'tuyettthr0001', N'Trần Thị Tuyết', N'tuyettthr0001@basau.net', 21, 26, 0, 1, N'Active', '2026-06-03 22:16:02.540');
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (57, N'HR0002', N'maipthr0002', N'Phan Tuyết Mai', N'maipthr0002@basau.net', 21, 32, 0, 0, N'Active', '2026-05-30 09:37:40.083');
-INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (58, N'HR0003', N'namnhhr0003', N'Nguyễn Hoàng Nam', N'namnhhr0003@basau.net', 21, 33, 0, 0, N'Active', NULL);
-INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (59, N'HR0004', N'dungpthr0004', N'Phạm Thị Dung', N'dungpthr0004@basau.net', 21, 32, 0, 0, N'Active', NULL);
+INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (58, N'HR0003', N'namnhhr0003', N'Nguyễn Hoàng Nam', N'namnhhr0003@basau.net', 21, 33, 0, 0, N'Active', '2026-06-03 22:27:00.450');
+INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (59, N'HR0004', N'dungpthr0004', N'Phạm Thị Dung', N'dungpthr0004@basau.net', 21, 32, 0, 0, N'Active', '2026-05-31 22:58:20.133');
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (60, N'KT0001', N'maypvkt0001', N'Phạm Văn Máy', N'maypvkt0001@basau.net', 22, 27, 0, 1, N'Active', '2026-05-29 08:57:32.123');
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (61, N'CN0001', N'cuongnvcn0001', N'Nguyễn Văn Cường', N'cuongnvcn0001@basau.net', 22, 38, 0, 0, N'Active', '2026-05-30 10:13:55.007');
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (62, N'CN0002', N'dunglvcn0002', N'Lê Văn Dũng', N'dunglvcn0002@basau.net', 22, 37, 0, 0, N'Active', NULL);
@@ -62,18 +62,19 @@ INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], 
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (64, N'CN0004', N'hoattcn0004', N'Trần Thị Hoa', N'hoattcn0004@basau.net', 22, 38, 0, 0, N'Active', NULL);
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (65, N'CN0005', N'hungbvcn0005', N'Bùi Văn Hùng', N'hungbvcn0005@basau.net', 22, 38, 0, 0, N'Active', NULL);
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (66, N'CN0006', N'taidvcn0006', N'Đinh Văn Tài', N'taidvcn0006@basau.net', 22, 38, 0, 0, N'Active', '2026-05-29 08:58:23.200');
-INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (67, N'KD0001', N'linhdtkd0001', N'Đỗ Thùy Linh', N'linhdtkd0001@basau.net', 23, 29, 0, 1, N'Active', NULL);
+INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (67, N'KD0001', N'linhdtkd0001', N'Đỗ Thùy Linh', N'linhdtkd0001@basau.net', 21, 29, 0, 1, N'Active', NULL);
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (68, N'KD0002', N'anhnmkd0002', N'Nguyễn Minh Anh', N'anhnmkd0002@basau.net', 23, 33, 0, 0, N'Active', NULL);
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (69, N'KD0003', N'baopqkd0003', N'Phạm Quốc Bảo', N'baopqkd0003@basau.net', 23, 33, 0, 0, N'Active', NULL);
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (70, N'KD0004', N'yenvhkd0004', N'Vũ Hoàng Yến', N'yenvhkd0004@basau.net', 23, 33, 0, 0, N'Active', NULL);
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (71, N'TC0001', N'huongvttc0001', N'Vũ Thị Hương', N'huongvttc0001@basau.net', 24, 30, 0, 1, N'Active', NULL);
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (72, N'TC0002', N'tuanbmtc0002', N'Bùi Minh Tuấn', N'tuanbmtc0002@basau.net', 24, 34, 0, 0, N'Active', NULL);
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (73, N'TC0003', N'thaolttc0003', N'Lê Thị Thảo', N'thaolttc0003@basau.net', 24, 34, 0, 0, N'Active', NULL);
-INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (74, N'IT0001', N'admin', N'Nguyễn Văn Trị', N'admin@basau.net', 25, 35, 1, 1, N'Active', '2026-05-30 19:40:35.407');
-INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (75, N'IT0002', N'hoanglhit0002', N'Lê Huy Hoàng', N'hoanglhit0002@basau.net', 25, 36, 0, 0, N'Active', '2026-05-29 09:20:57.287');
+INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (74, N'IT0001', N'admin', N'Nguyễn Văn Trị', N'admin@basau.net', 25, 35, 1, 1, N'Active', '2026-06-03 22:30:37.480');
+INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (75, N'IT0002', N'hoanglhit0002', N'Lê Huy Hoàng', N'hoanglhit0002@basau.net', 25, 36, 0, 0, N'Active', '2026-05-30 22:52:29.830');
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (76, N'IT0003', N'khanhtvit0003', N'Trần Văn Khánh', N'khanhtvit0003@basau.net', 25, 36, 0, 0, N'Active', NULL);
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (77, N'GV0001', N'lanhhgv0001', N'Hoàng Hương Lan', N'lanhhgv0001@basau.net', 26, 31, 0, 1, N'Active', '2026-05-30 10:15:33.743');
 INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (78, N'GV0002', N'namthgv0002', N'Trần Hải Nam', N'namthgv0002@basau.net', 26, 31, 0, 0, N'Active', '2026-05-30 09:48:02.203');
+INSERT INTO [Users] ([UserID], [EmployeeCode], [Username], [FullName], [Email], [DepartmentID], [JobTitleID], [IsITAdmin], [IsDeptAdmin], [Status], [LastLogin]) VALUES (79, N'', N'andhnv01749', N'Dương Hoài An', N'andhnv01749@basau.net', NULL, NULL, 0, 0, N'Active', NULL);
 SET IDENTITY_INSERT [Users] OFF;
 
 -- Table: Permissions
@@ -87,10 +88,10 @@ INSERT INTO [Permissions] ([PermissionID], [PermissionKey], [Description]) VALUE
 INSERT INTO [Permissions] ([PermissionID], [PermissionKey], [Description]) VALUES (69, N'content.quizzes.manage', N'QL kho quiz');
 INSERT INTO [Permissions] ([PermissionID], [PermissionKey], [Description]) VALUES (70, N'schedules.manage', N'Quản lý lịch học');
 INSERT INTO [Permissions] ([PermissionID], [PermissionKey], [Description]) VALUES (71, N'attendance.manage', N'Quản lý điểm danh');
-INSERT INTO [Permissions] ([PermissionID], [PermissionKey], [Description]) VALUES (72, N'analytics.view', N'Xem ph?n t?ch n?ng cao');
+INSERT INTO [Permissions] ([PermissionID], [PermissionKey], [Description]) VALUES (72, N'analytics.view', N'Xem phân tích nâng cao');
 INSERT INTO [Permissions] ([PermissionID], [PermissionKey], [Description]) VALUES (73, N'auditlogs.view', N'Xem nhật ký hoạt động');
 INSERT INTO [Permissions] ([PermissionID], [PermissionKey], [Description]) VALUES (74, N'backup.manage', N'Quản lý backup');
-INSERT INTO [Permissions] ([PermissionID], [PermissionKey], [Description]) VALUES (75, N'permissions.manage', N'Ph?n quy?n h? th?ng');
+INSERT INTO [Permissions] ([PermissionID], [PermissionKey], [Description]) VALUES (75, N'permissions.manage', N'Phân quyền hệ thống');
 INSERT INTO [Permissions] ([PermissionID], [PermissionKey], [Description]) VALUES (76, N'newsletter.manage', N'Quản lý newsletter');
 INSERT INTO [Permissions] ([PermissionID], [PermissionKey], [Description]) VALUES (77, N'settings.manage', N'Quản lý cài đặt hệ thống');
 INSERT INTO [Permissions] ([PermissionID], [PermissionKey], [Description]) VALUES (78, N'course.levels.manage', N'Quản lý level khóa học');
@@ -116,7 +117,7 @@ SET IDENTITY_INSERT [Categories] OFF;
 
 -- Table: Courses
 SET IDENTITY_INSERT [Courses] ON;
-INSERT INTO [Courses] ([CourseID], [CategoryID], [CourseCode], [Title], [Description], [Thumbnail], [IsMandatory], [Status], [Level], [CreatedBy], [TargetDepartmentID], [OwnerDepartmentID], [IsForAllDepartments], [TargetDepartmentIds], [CreatedAt]) VALUES (33, 16, N'HSE101', N'An toàn Lao động & Phòng cháy Chữa cháy (HSE)', N'Khóa học bắt buộc dành cho công nhân sản xuất và toàn bộ nhân viên nhằm nắm vững quy tắc an toàn lao động, sơ cứu y tế cơ bản và quy trình xử lý khi có cháy nổ tại nhà máy.', N'https://images.unsplash.com/photo-1590486803833-1c5dc8ddd4c8?auto=format&fit=crop&w=400&q=80', 1, N'Draft', 1, 60, NULL, 22, 1, NULL, '2026-05-29 08:45:29.143');
+INSERT INTO [Courses] ([CourseID], [CategoryID], [CourseCode], [Title], [Description], [Thumbnail], [IsMandatory], [Status], [Level], [CreatedBy], [TargetDepartmentID], [OwnerDepartmentID], [IsForAllDepartments], [TargetDepartmentIds], [CreatedAt]) VALUES (33, 16, N'HSE101', N'An toàn Lao động & Phòng cháy Chữa cháy (HSE)', N'Khóa học bắt buộc dành cho công nhân sản xuất và toàn bộ nhân viên nhằm nắm vững quy tắc an toàn lao động, sơ cứu y tế cơ bản và quy trình xử lý khi có cháy nổ tại nhà máy.', N'https://images.unsplash.com/photo-1590486803833-1c5dc8ddd4c8?auto=format&fit=crop&w=400&q=80', 1, N'Draft', 1, 60, 21, 22, 1, N'21', '2026-05-29 08:45:29.143');
 INSERT INTO [Courses] ([CourseID], [CategoryID], [CourseCode], [Title], [Description], [Thumbnail], [IsMandatory], [Status], [Level], [CreatedBy], [TargetDepartmentID], [OwnerDepartmentID], [IsForAllDepartments], [TargetDepartmentIds], [CreatedAt]) VALUES (34, 16, N'PRO102', N'Quy trình Vận hành Máy & Tiêu chuẩn 5S', N'Hướng dẫn công nhân cách vận hành máy móc an toàn, các bước bảo trì hàng ngày và áp dụng phương pháp 5S (Sàng lọc, Sắp xếp, Sạch sẽ, Săn sóc, Sẵn sàng) tại vị trí sản xuất.', N'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=400&q=80', 1, N'Published', 1, 60, 22, 22, 0, NULL, '2026-05-29 08:45:29.143');
 INSERT INTO [Courses] ([CourseID], [CategoryID], [CourseCode], [Title], [Description], [Thumbnail], [IsMandatory], [Status], [Level], [CreatedBy], [TargetDepartmentID], [OwnerDepartmentID], [IsForAllDepartments], [TargetDepartmentIds], [CreatedAt]) VALUES (35, 19, N'ITSEC101', N'An ninh thông tin & Phòng ngừa Phishing', N'Nâng cao nhận thức bảo mật, quy tắc đặt mật khẩu mạnh, nhận biết các email giả mạo và phương án báo cáo sự cố an ninh thông tin cho bộ phận IT.', N'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=400&q=80', 1, N'Published', 1, 74, NULL, 25, 1, NULL, '2026-05-29 08:45:29.143');
 INSERT INTO [Courses] ([CourseID], [CategoryID], [CourseCode], [Title], [Description], [Thumbnail], [IsMandatory], [Status], [Level], [CreatedBy], [TargetDepartmentID], [OwnerDepartmentID], [IsForAllDepartments], [TargetDepartmentIds], [CreatedAt]) VALUES (36, 15, N'SALES201', N'Kỹ năng Bán hàng & Chăm sóc Khách hàng', N'Quy trình tìm kiếm, tiếp cận khách hàng tiềm năng, kỹ năng telesales và đàm phán xử lý từ chối chuyên nghiệp để chốt hợp đồng hiệu quả.', N'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=400&q=80', 0, N'Published', 2, 67, 23, 23, 0, NULL, '2026-05-29 08:45:29.143');
@@ -144,12 +145,12 @@ INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentB
 INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (24, 31, N'Bài 2: Sử dụng trang thiết bị bảo hộ cá nhân (PPE)', N'Text', N'<h1>Hướng dẫn sử dụng PPE đúng cách</h1><p>PPE bao gồm: Mũ bảo hộ, Kính an toàn, Nút tai chống ồn, Găng tay bảo hộ và Giày mũi sắt chống đinh.</p><p>Nhân viên có trách nhiệm kiểm tra thiết bị bảo hộ của mình trước mỗi ca làm việc để phát hiện hư hỏng kịp thời.</p>', N'', 1, 2);
 INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (25, 32, N'Bài 1: Quy trình ứng phó khi có hỏa hoạn xảy ra', N'Text', N'<h1>Hệ thống phòng cháy chữa cháy</h1><p>Trong trường hợp có còi báo cháy: Ngắt nguồn điện máy móc gần nhất, di chuyển nhanh ra lối thoát hiểm gần nhất theo chỉ dẫn đèn Exit.</p>', N'https://www.w3schools.com/html/movie.mp4', 1, 1);
 INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (26, 32, N'Bài 2: Kỹ thuật sử dụng bình chữa cháy CO2 và bình bột', N'Text', N'<h1>Sử dụng bình cứu hỏa xách tay</h1><p>Sử dụng quy tắc PASS khi dùng bình cứu hỏa: Pull pin (Rút chốt) - Aim low (Hướng vòi vào gốc lửa) - Squeeze lever (Bóp cò) - Sweep (Quét qua lại).</p>', N'', 1, 2);
-INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (27, 33, N'Bài 1: Quy tắc an toàn điện trong vận hành máy móc', N'Text', N'<h1>Nguyên tắc an toàn điện</h1><p>Không dùng tay ướt cắm phích điện hoặc chạm vào tủ điện chính. Bảo đảm thiết bị đã được nối đất và có aptomat chống giật.</p>', N'https://www.w3schools.com/html/mov_bbb.mp4', 1, 1);
+INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (27, 41, N'Bài 1: Quy tắc an toàn điện trong vận hành máy móc', N'Text', N'<h1>Nguyên tắc an toàn điện</h1><p>Không dùng tay ướt cắm phích điện hoặc chạm vào tủ điện chính. Bảo đảm thiết bị đã được nối đất và có aptomat chống giật.</p>', N'https://www.w3schools.com/html/mov_bbb.mp4', 1, 1);
 INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (28, 33, N'Bài 2: Xử lý sự cố rò rỉ hóa chất và sơ cứu ban đầu', N'Text', N'<h1>Quy trình xử lý hóa chất tràn đổ</h1><p>Khi hóa chất tràn đổ, khoanh vùng rò rỉ, dùng cát thấm chất lỏng và đeo khẩu trang chống hơi độc để dọn dẹp. Rửa sạch da/mắt dưới vòi nước sạch 15 phút nếu dính hóa chất.</p>', N'', 1, 2);
 INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (29, 34, N'Bài 1: 5S là gì? Thực hành Seiri, Seiton, Seiso, Seiketsu, Shitsuke', N'Text', N'<h1>Khái niệm 5S Nhật Bản</h1><p>1. Seiri (Sàng lọc): Loại bỏ vật dụng không cần thiết.<br>2. Seiton (Sắp xếp): Đặt vật dụng đúng nơi quy định.<br>3. Seiso (Sạch sẽ): Lau chùi vệ sinh máy móc hàng ngày.<br>4. Seiketsu (Săn sóc): Duy trì và chuẩn hóa 3S trên.<br>5. Shitsuke (Sẵn sàng): Tạo thói quen tự giác tuân thủ.</p>', N'https://www.w3schools.com/html/movie.mp4', 1, 1);
 INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (30, 35, N'Bài 1: Quy trình khởi động, kiểm tra và tắt máy an toàn', N'Text', N'<h1>Vận hành máy đúng kỹ thuật</h1><p>Bước 1: Kiểm tra ngoại quan máy và dây dẫn điện.<br>Bước 2: Bật công tắc nguồn chính.<br>Bước 3: Nhấn nút Start. Lưu ý luôn giữ tay khô ráo khi thao tác điện.<br>Khi hoàn thành ca hoặc có sự cố, nhấn nút dừng khẩn cấp (Emergency Stop) để dừng máy ngay lập tức.</p>', N'', 1, 1);
-INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (31, 36, N'Bài 1: Nguyên tắc đặt mật khẩu mạnh và bảo mật đa lớp (MFA)', N'Text', N'<h1>Quy tắc đặt mật khẩu mạnh</h1><p>Mật khẩu tối thiểu 8 ký tự, kết hợp chữ hoa, chữ thường, số và ký tự đặc biệt. Kích hoạt tính năng MFA (xác thực đa nhân tố) trên tài khoản làm việc của công ty.</p>', N'https://www.w3schools.com/html/mov_bbb.mp4', 1, 1);
-INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (32, 37, N'Bài 1: Cách kiểm tra liên kết lạ và xử lý khi nghi ngờ bị tấn công Phishing', N'Text', N'<h1>Phòng chống Phishing email</h1><p>Phishing là hình thức kẻ giả danh đối tác, sếp dụ người dùng nhấp vào link độc hại. Quy tắc vàng: Không nhấp link lạ trong email khẩn cấp, di chuột lên link để xem URL thực tế.</p>', N'', 1, 1);
+INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (31, 37, N'Bài 1: Nguyên tắc đặt mật khẩu mạnh và bảo mật đa lớp (MFA)', N'Video', NULL, NULL, 1, 1);
+INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (32, 36, N'Bài 1: Cách kiểm tra liên kết lạ và xử lý khi nghi ngờ bị tấn công Phishing', N'Video', NULL, N'/uploads/lessons/32/video/20260603224353_mini project nhóm 5.mp4', 1, 1);
 INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (33, 38, N'Bài 1: Xác định chân dung khách hàng và kỹ thuật chào hàng qua điện thoại (Telesales)', N'Text', N'<h1>Tìm kiếm Khách hàng</h1><p>Phân tích nhu cầu của doanh nghiệp để vẽ chân dung khách hàng. Chuẩn bị kịch bản cuộc gọi điện thoại chào hàng, hướng tới mục tiêu thiết lập một buổi hẹn gặp trực tiếp.</p>', N'https://www.w3schools.com/html/movie.mp4', 2, 1);
 INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (34, 39, N'Bài 1: Các tình huống từ chối phổ biến và phương pháp đàm phán thuyết phục', N'Text', N'<h1>Xử lý từ chối trong bán hàng</h1><p>Khi khách hàng từ chối về giá, hãy nhấn mạnh giá trị sản phẩm mang lại so với đối thủ và đưa ra bài toán lợi ích kinh tế lâu dài thay vì giảm giá vội vàng.</p>', N'', 2, 1);
 INSERT INTO [Lessons] ([LessonID], [ModuleID], [Title], [ContentType], [ContentBody], [VideoURL], [Level], [SortOrder]) VALUES (35, 40, N'Bài 1: Cách phân biệt hóa đơn GTGT hợp pháp và chứng từ thanh toán hợp lệ', N'Text', N'<h1>Hóa đơn chứng từ kế toán</h1><p>Hóa đơn mua hàng từ 20 triệu trở lên bắt buộc phải chuyển khoản qua tài khoản ngân hàng của công ty. Hóa đơn GTGT đầu vào phải ghi chính xác tên doanh nghiệp và mã số thuế.</p>', N'https://www.w3schools.com/html/mov_bbb.mp4', 1, 1);
@@ -163,13 +164,13 @@ INSERT INTO [LessonAttachments] ([AttachmentID], [LessonID], [FileName], [FilePa
 INSERT INTO [LessonAttachments] ([AttachmentID], [LessonID], [FileName], [FilePath]) VALUES (6, 26, N'Cẩm nang PCCC công nghiệp.pdf', N'/attachments/PCCC_Guide.pdf');
 INSERT INTO [LessonAttachments] ([AttachmentID], [LessonID], [FileName], [FilePath]) VALUES (7, 27, N'Tiêu chuẩn an toàn điện cao áp.pdf', N'/attachments/Electrical_Safety.pdf');
 INSERT INTO [LessonAttachments] ([AttachmentID], [LessonID], [FileName], [FilePath]) VALUES (8, 35, N'Mẫu hóa đơn GTGT hợp lệ.pdf', N'/attachments/Valid_Invoice_Template.pdf');
+INSERT INTO [LessonAttachments] ([AttachmentID], [LessonID], [FileName], [FilePath]) VALUES (15, 31, N'CapTheFVPL_FptCup2026.jpg', N'/uploads/lessons/31/20260601085434_CapTheFVPL_FptCup2026.jpg');
 SET IDENTITY_INSERT [LessonAttachments] OFF;
 
 -- Table: Exams
 SET IDENTITY_INSERT [Exams] ON;
 INSERT INTO [Exams] ([ExamID], [CourseID], [ExamTitle], [DurationMinutes], [PassScore], [Level], [MaxAttempts], [StartDate], [EndDate], [TargetDepartmentId], [ModuleID]) VALUES (29, 33, N'HSE101 - Trắc nghiệm Chương 1: Quy tắc an toàn & PPE', 15, 100.00, 1, 3, NULL, NULL, NULL, 31);
 INSERT INTO [Exams] ([ExamID], [CourseID], [ExamTitle], [DurationMinutes], [PassScore], [Level], [MaxAttempts], [StartDate], [EndDate], [TargetDepartmentId], [ModuleID]) VALUES (30, 33, N'HSE101 - Trắc nghiệm Chương 2: PCCC & Cứu nạn cứu hộ', 15, 100.00, 1, 3, NULL, NULL, NULL, 32);
-INSERT INTO [Exams] ([ExamID], [CourseID], [ExamTitle], [DurationMinutes], [PassScore], [Level], [MaxAttempts], [StartDate], [EndDate], [TargetDepartmentId], [ModuleID]) VALUES (31, 33, N'HSE101 - Trắc nghiệm Chương 3: An toàn Điện & Hóa chất', 20, 100.00, 1, 5, NULL, NULL, NULL, 33);
 INSERT INTO [Exams] ([ExamID], [CourseID], [ExamTitle], [DurationMinutes], [PassScore], [Level], [MaxAttempts], [StartDate], [EndDate], [TargetDepartmentId], [ModuleID]) VALUES (32, 34, N'PRO102 - Trắc nghiệm Chương 1: Đánh giá tiêu chuẩn 5S', 10, 100.00, 1, 3, NULL, NULL, NULL, 34);
 INSERT INTO [Exams] ([ExamID], [CourseID], [ExamTitle], [DurationMinutes], [PassScore], [Level], [MaxAttempts], [StartDate], [EndDate], [TargetDepartmentId], [ModuleID]) VALUES (33, 34, N'PRO102 - Trắc nghiệm Chương 2: Vận hành máy & Sự cố', 10, 100.00, 1, 3, NULL, NULL, NULL, 35);
 INSERT INTO [Exams] ([ExamID], [CourseID], [ExamTitle], [DurationMinutes], [PassScore], [Level], [MaxAttempts], [StartDate], [EndDate], [TargetDepartmentId], [ModuleID]) VALUES (34, 35, N'ITSEC101 - Trắc nghiệm Chương 1: Bảo mật tài khoản', 10, 100.00, 1, 3, NULL, NULL, NULL, 36);
@@ -203,21 +204,6 @@ INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (30, 48, 8
 INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (30, 49, 8.33);
 INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (30, 50, 8.33);
 INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (30, 51, 8.33);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 52, 6.66);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 53, 6.66);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 54, 6.66);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 55, 6.66);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 56, 6.66);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 57, 6.66);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 58, 6.66);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 59, 6.66);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 60, 6.66);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 61, 6.66);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 62, 6.66);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 63, 6.66);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 64, 6.66);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 65, 6.66);
-INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (31, 66, 6.66);
 INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (32, 67, 10.00);
 INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (32, 68, 10.00);
 INSERT INTO [ExamQuestions] ([ExamID], [QuestionID], [Points]) VALUES (32, 69, 10.00);
@@ -782,6 +768,15 @@ INSERT INTO [Enrollments] ([EnrollmentID], [UserID], [CourseID], [EnrollDate], [
 INSERT INTO [Enrollments] ([EnrollmentID], [UserID], [CourseID], [EnrollDate], [ProgressPercent], [Status], [CompletedDate]) VALUES (22, 68, 37, '2026-05-30 09:33:07.843', 0, N'NotStarted', NULL);
 INSERT INTO [Enrollments] ([EnrollmentID], [UserID], [CourseID], [EnrollDate], [ProgressPercent], [Status], [CompletedDate]) VALUES (23, 69, 37, '2026-05-30 09:33:08.187', 0, N'NotStarted', NULL);
 INSERT INTO [Enrollments] ([EnrollmentID], [UserID], [CourseID], [EnrollDate], [ProgressPercent], [Status], [CompletedDate]) VALUES (24, 70, 37, '2026-05-30 09:33:08.530', 0, N'NotStarted', NULL);
+INSERT INTO [Enrollments] ([EnrollmentID], [UserID], [CourseID], [EnrollDate], [ProgressPercent], [Status], [CompletedDate]) VALUES (25, 75, 35, '2026-05-30 19:57:15.120', 75, N'InProgress', NULL);
+INSERT INTO [Enrollments] ([EnrollmentID], [UserID], [CourseID], [EnrollDate], [ProgressPercent], [Status], [CompletedDate]) VALUES (26, 74, 35, '2026-05-30 22:55:15.370', 0, N'NotStarted', NULL);
+INSERT INTO [Enrollments] ([EnrollmentID], [UserID], [CourseID], [EnrollDate], [ProgressPercent], [Status], [CompletedDate]) VALUES (27, 57, 33, '2026-05-31 22:41:31.207', 0, N'NotStarted', NULL);
+INSERT INTO [Enrollments] ([EnrollmentID], [UserID], [CourseID], [EnrollDate], [ProgressPercent], [Status], [CompletedDate]) VALUES (28, 58, 33, '2026-05-31 22:41:31.237', 0, N'NotStarted', NULL);
+INSERT INTO [Enrollments] ([EnrollmentID], [UserID], [CourseID], [EnrollDate], [ProgressPercent], [Status], [CompletedDate]) VALUES (29, 59, 33, '2026-05-31 22:41:31.247', 0, N'NotStarted', NULL);
+INSERT INTO [Enrollments] ([EnrollmentID], [UserID], [CourseID], [EnrollDate], [ProgressPercent], [Status], [CompletedDate]) VALUES (30, 58, 35, '2026-05-31 22:52:23.897', 0, N'NotStarted', NULL);
+INSERT INTO [Enrollments] ([EnrollmentID], [UserID], [CourseID], [EnrollDate], [ProgressPercent], [Status], [CompletedDate]) VALUES (31, 58, 37, '2026-05-31 22:53:56.743', 40, N'InProgress', NULL);
+INSERT INTO [Enrollments] ([EnrollmentID], [UserID], [CourseID], [EnrollDate], [ProgressPercent], [Status], [CompletedDate]) VALUES (32, 54, 35, '2026-06-01 08:55:24.003', 0, N'NotStarted', NULL);
+INSERT INTO [Enrollments] ([EnrollmentID], [UserID], [CourseID], [EnrollDate], [ProgressPercent], [Status], [CompletedDate]) VALUES (33, 55, 35, '2026-06-03 22:44:31.973', 0, N'NotStarted', NULL);
 SET IDENTITY_INSERT [Enrollments] OFF;
 
 -- Table: UserExams
@@ -790,6 +785,9 @@ INSERT INTO [UserExams] ([UserExamID], [UserID], [ExamID], [Score], [IsFinish], 
 INSERT INTO [UserExams] ([UserExamID], [UserID], [ExamID], [Score], [IsFinish], [StartTime], [EndTime]) VALUES (26, 78, 29, 50.00, 1, '2026-05-30 09:48:52.610', '2026-05-30 09:49:25.760');
 INSERT INTO [UserExams] ([UserExamID], [UserID], [ExamID], [Score], [IsFinish], [StartTime], [EndTime]) VALUES (27, 61, 30, 0.00, 0, '2026-05-30 10:14:17.810', NULL);
 INSERT INTO [UserExams] ([UserExamID], [UserID], [ExamID], [Score], [IsFinish], [StartTime], [EndTime]) VALUES (28, 61, 29, 0.00, 0, '2026-05-30 10:14:30.280', NULL);
+INSERT INTO [UserExams] ([UserExamID], [UserID], [ExamID], [Score], [IsFinish], [StartTime], [EndTime]) VALUES (29, 75, 34, 100.00, 1, '2026-05-30 19:57:34.240', '2026-05-30 22:44:01.567');
+INSERT INTO [UserExams] ([UserExamID], [UserID], [ExamID], [Score], [IsFinish], [StartTime], [EndTime]) VALUES (30, 75, 34, 0.00, 0, '2026-05-30 22:44:40.067', NULL);
+INSERT INTO [UserExams] ([UserExamID], [UserID], [ExamID], [Score], [IsFinish], [StartTime], [EndTime]) VALUES (31, 58, 38, 0.00, 0, '2026-06-03 22:29:25.050', NULL);
 SET IDENTITY_INSERT [UserExams] OFF;
 
 -- Table: UserAnswers
@@ -805,12 +803,39 @@ INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) 
 INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (26, 39, 185, 1);
 INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (28, 30, 148, 1);
 INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (28, 31, 153, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (26, 30, 148, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (26, 31, 151, 0);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (26, 32, 156, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (26, 33, 161, 0);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (26, 34, 165, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (26, 35, 169, 0);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (26, 36, 173, 0);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (26, 37, 177, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (26, 38, 181, 0);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (26, 39, 185, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (28, 30, 148, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (28, 31, 153, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (29, 87, 376, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (29, 88, 380, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (29, 89, 384, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (29, 90, 388, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (29, 91, 391, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (29, 92, 396, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (29, 93, 400, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (29, 94, 404, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (29, 95, 408, 1);
+INSERT INTO [UserAnswers] ([UserExamID], [QuestionID], [OptionID], [IsCorrect]) VALUES (29, 96, 412, 1);
 
 -- Table: UserLessonLogs
 SET IDENTITY_INSERT [UserLessonLogs] ON;
 INSERT INTO [UserLessonLogs] ([LogID], [UserID], [LessonID], [Status], [DurationSpent]) VALUES (6, 61, 23, N'Completed', NULL);
 INSERT INTO [UserLessonLogs] ([LogID], [UserID], [LessonID], [Status], [DurationSpent]) VALUES (7, 61, 24, N'Completed', NULL);
 INSERT INTO [UserLessonLogs] ([LogID], [UserID], [LessonID], [Status], [DurationSpent]) VALUES (8, 78, 23, N'Completed', 0);
+INSERT INTO [UserLessonLogs] ([LogID], [UserID], [LessonID], [Status], [DurationSpent]) VALUES (9, 75, 31, N'Completed', 0);
+INSERT INTO [UserLessonLogs] ([LogID], [UserID], [LessonID], [Status], [DurationSpent]) VALUES (10, 75, 32, N'Completed', 0);
+INSERT INTO [UserLessonLogs] ([LogID], [UserID], [LessonID], [Status], [DurationSpent]) VALUES (11, 58, 35, N'Completed', 0);
+INSERT INTO [UserLessonLogs] ([LogID], [UserID], [LessonID], [Status], [DurationSpent]) VALUES (12, 58, 27, N'Completed', 0);
+INSERT INTO [UserLessonLogs] ([LogID], [UserID], [LessonID], [Status], [DurationSpent]) VALUES (13, 58, 36, N'Completed', 0);
 SET IDENTITY_INSERT [UserLessonLogs] OFF;
 
 -- Table: TrainingAssignments
@@ -821,6 +846,10 @@ INSERT INTO [TrainingAssignments] ([AssignmentID], [CourseID], [UserID], [Assign
 INSERT INTO [TrainingAssignments] ([AssignmentID], [CourseID], [UserID], [AssignedBy], [AssignedDate], [DueDate], [Priority]) VALUES (30, 37, 68, 77, '2026-05-30 09:33:07.667', '2026-05-31 00:00:00.000', N'High');
 INSERT INTO [TrainingAssignments] ([AssignmentID], [CourseID], [UserID], [AssignedBy], [AssignedDate], [DueDate], [Priority]) VALUES (31, 37, 69, 77, '2026-05-30 09:33:08.017', '2026-05-31 00:00:00.000', N'High');
 INSERT INTO [TrainingAssignments] ([AssignmentID], [CourseID], [UserID], [AssignedBy], [AssignedDate], [DueDate], [Priority]) VALUES (32, 37, 70, 77, '2026-05-30 09:33:08.357', '2026-05-31 00:00:00.000', N'High');
+INSERT INTO [TrainingAssignments] ([AssignmentID], [CourseID], [UserID], [AssignedBy], [AssignedDate], [DueDate], [Priority]) VALUES (33, 33, 57, 56, '2026-05-31 22:41:31.157', '2026-06-06 00:00:00.000', N'High');
+INSERT INTO [TrainingAssignments] ([AssignmentID], [CourseID], [UserID], [AssignedBy], [AssignedDate], [DueDate], [Priority]) VALUES (35, 33, 59, 56, '2026-05-31 22:41:31.240', '2026-06-06 00:00:00.000', N'High');
+INSERT INTO [TrainingAssignments] ([AssignmentID], [CourseID], [UserID], [AssignedBy], [AssignedDate], [DueDate], [Priority]) VALUES (44, 35, 58, 56, '2026-05-31 23:14:58.240', '2026-06-04 01:57:00.000', N'Normal');
+INSERT INTO [TrainingAssignments] ([AssignmentID], [CourseID], [UserID], [AssignedBy], [AssignedDate], [DueDate], [Priority]) VALUES (45, 37, 58, 56, '2026-06-01 08:56:55.270', '2026-06-03 17:56:00.000', N'Low');
 SET IDENTITY_INSERT [TrainingAssignments] OFF;
 
 -- Table: Faqs

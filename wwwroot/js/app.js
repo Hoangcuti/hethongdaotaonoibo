@@ -76,11 +76,15 @@ function debounce(fn, wait = 300) {
 }
 
 async function apiFetch(url, options = {}, timeoutMs = 15000) {
+    const isFormData = options.body instanceof FormData || options.isFormData;
+    let actualTimeout = timeoutMs;
+    if (isFormData && timeoutMs === 15000) {
+        actualTimeout = 1800000; // 30 minutes for large file uploads
+    }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), actualTimeout);
     try {
         const headers = { ...(options.headers || {}) };
-        const isFormData = options.body instanceof FormData || options.isFormData;
         if (!isFormData && !headers['Content-Type']) {
             headers['Content-Type'] = 'application/json';
         }

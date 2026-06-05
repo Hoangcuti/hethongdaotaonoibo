@@ -556,40 +556,72 @@ public class StudentController : Controller
         if (auth != null) return auth;
 
         var userId = GetCurrentUserId();
-        var isEnrolled = await _db.Enrollments.AnyAsync(e => e.UserId == userId && e.CourseId == courseId);
-        if (!isEnrolled) return RedirectToAction("Index", "Student");
-
-        // Kiểm tra xem khóa học có quá hạn và bị khóa hay không
-        var enrollment = await _db.Enrollments.FirstOrDefaultAsync(e => e.UserId == userId && e.CourseId == courseId);
-        var assignment = await _db.TrainingAssignments.FirstOrDefaultAsync(ta => ta.UserId == userId && ta.CourseId == courseId);
-        if (assignment != null && assignment.DueDate.HasValue && assignment.DueDate.Value < DateTime.Now)
-        {
-            var progress = enrollment?.ProgressPercent ?? 0;
-            if (progress < 100)
-            {
-                TempData["ErrorMessage"] = "Khóa học này đã quá hạn hoàn thành và bị khóa. Vui lòng liên hệ Trưởng phòng để được mở lại/gia hạn.";
-                return RedirectToAction("Index", "Student");
-            }
-        }
-
+        var user = await _db.Users.FindAsync(userId);
+        
         var exam = await _db.Exams
             .Include(e => e.Course)
-            .FirstOrDefaultAsync(e => e.ExamId == examId && e.CourseId == courseId);
+            .FirstOrDefaultAsync(e => e.ExamId == examId);
         if (exam == null) return NotFound();
+
+        // Check permission: either course enrollment, or targeting department, or admin/owner.
+        bool hasAccess = false;
+        int effectiveCourseId = exam.CourseId ?? 0;
+
+        if (exam.CourseId.HasValue && exam.CourseId.Value > 0)
+        {
+            var isEnrolled = await _db.Enrollments.AnyAsync(e => e.UserId == userId && e.CourseId == exam.CourseId.Value);
+            if (isEnrolled)
+            {
+                hasAccess = true;
+                // Check for course expiration and locked
+                var enrollment = await _db.Enrollments.FirstOrDefaultAsync(e => e.UserId == userId && e.CourseId == exam.CourseId.Value);
+                var assignment = await _db.TrainingAssignments.FirstOrDefaultAsync(ta => ta.UserId == userId && ta.CourseId == exam.CourseId.Value);
+                if (assignment != null && assignment.DueDate.HasValue && assignment.DueDate.Value < DateTime.Now)
+                {
+                    var progress = enrollment?.ProgressPercent ?? 0;
+                    if (progress < 100)
+                    {
+                        TempData["ErrorMessage"] = "Khóa học này đã quá hạn hoàn thành và bị khóa. Vui lòng liên hệ Trưởng phòng để được mở lại/gia hạn.";
+                        return RedirectToAction("Index", "Student");
+                    }
+                }
+            }
+        }
+        else if (exam.TargetDepartmentId.HasValue && exam.TargetDepartmentId.Value > 0)
+        {
+            if (user != null && user.DepartmentId == exam.TargetDepartmentId.Value)
+            {
+                hasAccess = true;
+            }
+        }
+        else
+        {
+            // If neither course nor department, it's a global exam.
+            hasAccess = true;
+        }
+
+        if (!hasAccess)
+        {
+            TempData["ErrorMessage"] = "Bạn không có quyền thực hiện bài kiểm tra này.";
+            return RedirectToAction("Index", "Student");
+        }
 
         // Check attempts limit
         var attemptsCount = await _db.UserExams.CountAsync(ue => ue.UserId == userId && ue.ExamId == examId && ue.IsFinish == true);
         var activeSession = await _db.UserExams.AnyAsync(ue => ue.UserId == userId && ue.ExamId == examId && ue.IsFinish != true);
         if (exam.MaxAttempts.HasValue && attemptsCount >= exam.MaxAttempts.Value && !activeSession)
         {
-            return RedirectToAction("Learn", "Student", new { courseId });
+            if (effectiveCourseId > 0)
+                return RedirectToAction("Learn", "Student", new { courseId = effectiveCourseId });
+            else
+                return RedirectToAction("Index", "Student");
         }
 
         // Check sequential chapter locks
-        if (exam.ModuleId.HasValue)
+        if (exam.ModuleId.HasValue && effectiveCourseId > 0)
         {
             var modulesList = await _db.CourseModules
-                .Where(m => m.CourseId == courseId)
+                .Where(m => m.CourseId == effectiveCourseId)
                 .OrderBy(m => m.SortOrder)
                 .ToListAsync();
             
@@ -597,7 +629,7 @@ public class StudentController : Controller
             if (currentMod != null)
             {
                 var courseExams = await _db.Exams
-                    .Where(e => e.CourseId == courseId)
+                    .Where(e => e.CourseId == effectiveCourseId)
                     .ToListAsync();
 
                 var courseExamIds = courseExams.Select(ce => ce.ExamId).ToList();
@@ -631,13 +663,13 @@ public class StudentController : Controller
 
                 if (isLocked)
                 {
-                    return RedirectToAction("Learn", "Student", new { courseId });
+                    return RedirectToAction("Learn", "Student", new { courseId = effectiveCourseId });
                 }
             }
         }
 
-        ViewBag.CourseId = courseId;
-        ViewBag.CourseTitle = exam.Course?.Title;
+        ViewBag.CourseId = effectiveCourseId;
+        ViewBag.CourseTitle = exam.Course?.Title ?? "Bài kiểm tra phòng ban";
         ViewBag.ExamId = examId;
         ViewBag.ExamTitle = exam.ExamTitle;
 
@@ -948,10 +980,30 @@ public class StudentController : Controller
                 .FirstOrDefaultAsync(e => e.ExamId == examId);
             
             if (exam == null) return NotFound(new { error = "Khong tim thay bai thi." });
-            if (exam.CourseId == null) return BadRequest(new { error = "Bai thi khong thuoc khoa hoc nao." });
+            // Check permission: either course enrollment, targeting department, or global.
+            bool hasAccess = false;
+            if (exam.CourseId.HasValue && exam.CourseId.Value > 0)
+            {
+                var isEnrolled = await _db.Enrollments.AnyAsync(e => e.UserId == userId && e.CourseId == exam.CourseId.Value);
+                if (isEnrolled) hasAccess = true;
+            }
+            else if (exam.TargetDepartmentId.HasValue && exam.TargetDepartmentId.Value > 0)
+            {
+                var user = await _db.Users.FindAsync(userId.Value);
+                if (user != null && user.DepartmentId == exam.TargetDepartmentId.Value)
+                {
+                    hasAccess = true;
+                }
+            }
+            else if (!exam.CourseId.HasValue && !exam.TargetDepartmentId.HasValue)
+            {
+                hasAccess = true;
+            }
 
-            var isEnrolled = await _db.Enrollments.AnyAsync(e => e.UserId == userId && e.CourseId == exam.CourseId);
-            if (!isEnrolled) return Forbid();
+            if (!hasAccess)
+            {
+                return Forbid();
+            }
 
             // Check max attempts
             var attemptsCount = await _db.UserExams.CountAsync(ue => ue.UserId == userId && ue.ExamId == examId && ue.IsFinish == true);
@@ -1018,24 +1070,29 @@ public class StudentController : Controller
 
             var session = await GetOrCreateQuizSessionAsync(userId.Value, exam);
             var answers = await _db.UserAnswers.Where(a => a.UserExamId == session.UserExam.UserExamId).ToListAsync();
-            var answerMap = answers.ToDictionary(a => a.QuestionId, a => a.OptionId);
+            var answerMap = answers.ToDictionary(a => a.QuestionId, a => a);
 
             var questions = exam.ExamQuestions
                 .OrderBy(eq => eq.QuestionId)
-                .Select((eq, index) => new
-                {
-                    index,
-                    questionId = eq.QuestionId,
-                    questionText = eq.Question?.QuestionText ?? "Cau hoi khong co noi dung",
-                    points = eq.Points ?? 0,
-                    selectedOptionId = answerMap.TryGetValue(eq.QuestionId, out var selectedOptionId) ? selectedOptionId : null,
-                    options = (eq.Question?.QuestionOptions ?? new List<QuestionOption>())
-                        .OrderBy(o => o.OptionId)
-                        .Select(o => new
-                        {
-                            optionId = o.OptionId,
-                            optionText = o.OptionText
-                        }).ToList()
+                .Select((eq, index) => {
+                    answerMap.TryGetValue(eq.QuestionId, out var ans);
+                    return new
+                    {
+                        index,
+                        questionId = eq.QuestionId,
+                        questionText = eq.Question?.QuestionText ?? "Cau hoi khong co noi dung",
+                        questionType = eq.Question?.QuestionType ?? "MultipleChoice",
+                        points = eq.Points ?? 0,
+                        selectedOptionId = ans?.OptionId,
+                        selectedTextResponse = ans?.TextResponse,
+                        options = (eq.Question?.QuestionOptions ?? new List<QuestionOption>())
+                            .OrderBy(o => o.OptionId)
+                            .Select(o => new
+                            {
+                                optionId = o.OptionId,
+                                optionText = o.OptionText
+                            }).ToList()
+                    };
                 }).ToList();
 
             return Json(new
@@ -1074,7 +1131,7 @@ public class StudentController : Controller
         if (userExam.IsFinish == true) return BadRequest(new { error = "Bai kiem tra nay da duoc nop." });
 
         var normalizedAnswers = NormalizeAnswers(dto.Answers);
-        await SyncUserAnswersAsync(userExam.UserExamId, normalizedAnswers);
+        await SyncUserAnswersAsync(userExam.UserExamId, normalizedAnswers, dto.TextAnswers);
 
         var session = await _db.QuizSessionStates.FirstOrDefaultAsync(s => s.UserExamId == userExam.UserExamId);
         if (session == null)
@@ -1085,8 +1142,8 @@ public class StudentController : Controller
 
         session.CurrentQuestionIndex = Math.Max(dto.CurrentQuestionIndex, 0);
         session.RemainingSeconds = Math.Max(dto.RemainingSeconds, 0);
-        session.AnsweredCount = normalizedAnswers.Count;
-        session.SavedAnswersJson = JsonSerializer.Serialize(normalizedAnswers);
+        session.AnsweredCount = normalizedAnswers.Count + (dto.TextAnswers?.Count ?? 0);
+        session.SavedAnswersJson = JsonSerializer.Serialize(new { OptionAnswers = normalizedAnswers, TextAnswers = dto.TextAnswers });
         session.LastActivityAt = DateTime.Now;
         session.LastSavedAt = DateTime.Now;
 
@@ -1115,7 +1172,7 @@ public class StudentController : Controller
         if (userExam?.Exam == null) return NotFound();
 
         var normalizedAnswers = NormalizeAnswers(dto.Answers);
-        await SyncUserAnswersAsync(userExam.UserExamId, normalizedAnswers);
+        await SyncUserAnswersAsync(userExam.UserExamId, normalizedAnswers, dto.TextAnswers);
 
         var userAnswers = await _db.UserAnswers.Where(a => a.UserExamId == userExam.UserExamId).ToListAsync();
         var userAnswerMap = userAnswers.ToDictionary(a => a.QuestionId, a => a);
@@ -1154,8 +1211,8 @@ public class StudentController : Controller
 
         state.CurrentQuestionIndex = Math.Max(dto.CurrentQuestionIndex, 0);
         state.RemainingSeconds = Math.Max(dto.RemainingSeconds, 0);
-        state.AnsweredCount = normalizedAnswers.Count;
-        state.SavedAnswersJson = JsonSerializer.Serialize(normalizedAnswers);
+        state.AnsweredCount = normalizedAnswers.Count + (dto.TextAnswers?.Count ?? 0);
+        state.SavedAnswersJson = JsonSerializer.Serialize(new { OptionAnswers = normalizedAnswers, TextAnswers = dto.TextAnswers });
         state.LastActivityAt = DateTime.Now;
         state.LastSavedAt = DateTime.Now;
         state.SubmittedAt = DateTime.Now;
@@ -1189,10 +1246,37 @@ public class StudentController : Controller
                     .ThenInclude(eq => eq.Question)
                         .ThenInclude(q => q.QuestionOptions)
             .FirstOrDefaultAsync(ue => ue.UserExamId == userExamId && ue.UserId == userId);
-        if (userExam?.Exam?.CourseId == null) return NotFound();
+        if (userExam?.Exam == null) return NotFound();
+        
+        // Check permission: either course enrollment, targeting department, or global.
+        bool hasAccess = false;
+        var exam = userExam.Exam;
+        if (exam.CourseId.HasValue && exam.CourseId.Value > 0)
+        {
+            var isEnrolled = await _db.Enrollments.AnyAsync(e => e.UserId == userId && e.CourseId == exam.CourseId.Value);
+            if (isEnrolled) hasAccess = true;
+        }
+        else if (exam.TargetDepartmentId.HasValue && exam.TargetDepartmentId.Value > 0)
+        {
+            var user = await _db.Users.FindAsync(userId.Value);
+            if (user != null && user.DepartmentId == exam.TargetDepartmentId.Value)
+            {
+                hasAccess = true;
+            }
+        }
+        else if (!exam.CourseId.HasValue && !exam.TargetDepartmentId.HasValue)
+        {
+            hasAccess = true;
+        }
 
-        var enrollment = await _db.Enrollments.FirstOrDefaultAsync(e => e.UserId == userId && e.CourseId == userExam.Exam.CourseId);
-        if (enrollment == null) return Forbid();
+        if (!hasAccess)
+        {
+            return Forbid();
+        }
+
+        var enrollment = exam.CourseId.HasValue 
+            ? await _db.Enrollments.FirstOrDefaultAsync(e => e.UserId == userId && e.CourseId == exam.CourseId.Value)
+            : null;
 
         var answers = await _db.UserAnswers.Where(a => a.UserExamId == userExamId).ToListAsync();
         var answerMap = answers.ToDictionary(a => a.QuestionId, a => a);
@@ -1211,7 +1295,7 @@ public class StudentController : Controller
             var selectedOptionId = answer?.OptionId;
             var correctOption = examQuestion.Question.QuestionOptions.FirstOrDefault(o => o.IsCorrect == true);
             var isCorrect = answer?.IsCorrect == true;
-            var isAnswered = selectedOptionId.HasValue;
+            var isAnswered = selectedOptionId.HasValue || !string.IsNullOrWhiteSpace(answer?.TextResponse);
 
             if (isCorrect)
             {
@@ -1231,12 +1315,16 @@ public class StudentController : Controller
             {
                 questionId = examQuestion.QuestionId,
                 questionText = examQuestion.Question.QuestionText,
+                questionType = examQuestion.Question.QuestionType ?? "MultipleChoice",
                 points = examQuestion.Points ?? 0,
                 isCorrect,
                 isAnswered,
                 selectedOptionId,
+                selectedTextResponse = answer?.TextResponse,
                 correctOptionId = correctOption?.OptionId,
-                correctOptionText = correctOption?.OptionText,
+                correctOptionText = examQuestion.Question.QuestionType == "FillInTheBlank"
+                    ? string.Join(", ", examQuestion.Question.QuestionOptions.Where(o => o.IsCorrect == true).Select(o => o.OptionText))
+                    : correctOption?.OptionText,
                 options = examQuestion.Question.QuestionOptions.OrderBy(o => o.OptionId).Select(o => new
                 {
                     optionId = o.OptionId,
@@ -1247,19 +1335,46 @@ public class StudentController : Controller
             });
         }
 
-        var finishedScores = await _db.UserExams
-            .Include(ue => ue.Exam)
-            .Where(ue => ue.UserId == userId && ue.Exam != null && ue.Exam.CourseId == userExam.Exam.CourseId && ue.IsFinish == true)
-            .Select(ue => ue.Score ?? 0)
-            .ToListAsync();
-
-        var evaluation = BuildCourseEvaluation(enrollment.ProgressPercent ?? 0, finishedScores);
-        
-        // Ensure consistent pass check: compare percentage to percentage threshold
-        // By default we assume PassScore is the percentage threshold (e.g. 50%)
         var currentScore = userExam.Score ?? 0;
         var threshold = userExam.Exam.PassScore ?? 50;
         var passedExam = currentScore >= threshold;
+
+        object evaluationObj = null;
+        if (exam.CourseId.HasValue && enrollment != null)
+        {
+            var finishedScores = await _db.UserExams
+                .Include(ue => ue.Exam)
+                .Where(ue => ue.UserId == userId && ue.Exam != null && ue.Exam.CourseId == exam.CourseId.Value && ue.IsFinish == true)
+                .Select(ue => ue.Score ?? 0)
+                .ToListAsync();
+
+            var evaluation = BuildCourseEvaluation(enrollment.ProgressPercent ?? 0, finishedScores);
+            evaluationObj = new
+            {
+                progressWeight = 40,
+                quizWeight = 60,
+                lessonCompletionPercent = evaluation.ProgressPercent,
+                quizAverage = evaluation.QuizAverage,
+                weightedScore = evaluation.WeightedScore,
+                ranking = evaluation.Ranking,
+                isPassed = evaluation.IsPassed,
+                note = evaluation.Note
+            };
+        }
+        else
+        {
+            evaluationObj = new
+            {
+                progressWeight = 0,
+                quizWeight = 100,
+                lessonCompletionPercent = 100m,
+                quizAverage = currentScore,
+                weightedScore = currentScore,
+                ranking = currentScore >= threshold ? "Đạt" : "Không đạt",
+                isPassed = passedExam,
+                note = "Bài thi kiểm tra đột xuất/đánh giá bộ phận"
+            };
+        }
 
         return Json(new
         {
@@ -1280,17 +1395,7 @@ public class StudentController : Controller
             unansweredCount,
             totalPoints,
             correctPoints,
-            evaluation = new
-            {
-                progressWeight = 40,
-                quizWeight = 60,
-                lessonCompletionPercent = evaluation.ProgressPercent,
-                quizAverage = evaluation.QuizAverage,
-                weightedScore = evaluation.WeightedScore,
-                ranking = evaluation.Ranking,
-                isPassed = evaluation.IsPassed,
-                note = evaluation.Note
-            },
+            evaluation = evaluationObj,
             details
         });
     }
@@ -1470,6 +1575,59 @@ public class StudentController : Controller
     {
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
+
+        try
+        {
+            var user = await _db.Users.FindAsync(userId.Value);
+            int? userDeptId = user?.DepartmentId;
+
+            var enrolledCourseIds = await _db.Enrollments
+                .Where(e => e.UserId == userId.Value && e.Status != "Completed")
+                .Select(e => e.CourseId)
+                .ToListAsync();
+
+            var examsToday = await _db.Exams
+                .Where(e => 
+                    (
+                        (e.CourseId.HasValue && enrolledCourseIds.Contains(e.CourseId)) || 
+                        (e.TargetDepartmentId.HasValue && e.TargetDepartmentId.Value == userDeptId) ||
+                        (!e.CourseId.HasValue && !e.TargetDepartmentId.HasValue)
+                    )
+                    && e.StartDate <= DateTime.Now 
+                    && (e.EndDate == null || e.EndDate >= DateTime.Now)
+                )
+                .ToListAsync();
+
+            bool hasNew = false;
+            foreach (var exam in examsToday)
+            {
+                var isFinished = await _db.UserExams.AnyAsync(ue => ue.ExamId == exam.ExamId && ue.UserId == userId.Value && ue.IsFinish == true);
+                if (isFinished) continue;
+
+                string todayTitle = $"Hôm nay bạn có lịch thi bài '{exam.ExamTitle}'!";
+                if (todayTitle.Length > 255) todayTitle = todayTitle.Substring(0, 252) + "...";
+
+                var exists = await _db.Notifications.AnyAsync(n => n.UserId == userId.Value && n.Title == todayTitle);
+                if (!exists)
+                {
+                    _db.Notifications.Add(new Notification
+                    {
+                        UserId = userId.Value,
+                        Title = todayTitle,
+                        IsRead = false
+                    });
+                    hasNew = true;
+                }
+            }
+            if (hasNew)
+            {
+                await _db.SaveChangesAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error checking today's exams: {ex.Message}");
+        }
 
         var notifications = await _db.Notifications
             .Where(n => n.UserId == userId)
@@ -1797,6 +1955,9 @@ public class StudentController : Controller
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
+        var user = await _db.Users.FindAsync(userId.Value);
+        int? userDeptId = user?.DepartmentId;
+
         var enrolledCourseIds = await _db.Enrollments
             .Where(e => e.UserId == userId.Value && e.Status != "Completed")
             .Select(e => e.CourseId)
@@ -1804,12 +1965,20 @@ public class StudentController : Controller
 
         var exams = await _db.Exams
             .Include(e => e.Course)
-            .Where(e => enrolledCourseIds.Contains(e.CourseId) && e.EndDate > DateTime.Now)
+            .Where(e => 
+                (
+                    (e.CourseId.HasValue && enrolledCourseIds.Contains(e.CourseId)) || 
+                    (e.TargetDepartmentId.HasValue && e.TargetDepartmentId.Value == userDeptId) ||
+                    (!e.CourseId.HasValue && !e.TargetDepartmentId.HasValue)
+                ) 
+                && (e.EndDate == null || e.EndDate > DateTime.Now)
+            )
             .Select(e => new
             {
                 examId = e.ExamId,
                 title = e.ExamTitle,
-                courseTitle = e.Course != null ? e.Course.Title : "N/A",
+                courseTitle = e.Course != null ? e.Course.Title : "Kiểm tra phòng ban",
+                courseId = e.CourseId ?? 0,
                 startTime = e.StartDate,
                 endTime = e.EndDate,
                 passScore = e.PassScore,
@@ -2065,44 +2234,80 @@ public class StudentController : Controller
         return (userExam, state);
     }
 
-    private async Task SyncUserAnswersAsync(int userExamId, Dictionary<int, int?> answers)
+    private async Task SyncUserAnswersAsync(int userExamId, Dictionary<int, int?>? answers, Dictionary<int, string>? textAnswers)
     {
-        var existingAnswers = await _db.UserAnswers.Where(a => a.UserExamId == userExamId).ToListAsync();
+        var existingAnswers = await _db.UserAnswers.Where(a => a.UserExamId == userExamId).ToDictionaryAsync(a => a.QuestionId);
 
-        var selectedOptionIds = answers.Values
-            .Where(v => v.HasValue)
-            .Select(v => v!.Value)
-            .Distinct()
-            .ToList();
+        var questionIds = new List<int>();
+        if (answers != null) questionIds.AddRange(answers.Keys);
+        if (textAnswers != null) questionIds.AddRange(textAnswers.Keys);
+        questionIds = questionIds.Distinct().ToList();
 
-        var correctLookup = await _db.QuestionOptions
-            .Where(o => selectedOptionIds.Contains(o.OptionId))
-            .ToDictionaryAsync(o => o.OptionId, o => o.IsCorrect == true);
+        var questions = await _db.QuestionBanks
+            .Include(q => q.QuestionOptions)
+            .Where(q => questionIds.Contains(q.QuestionId))
+            .ToDictionaryAsync(q => q.QuestionId);
 
-        foreach (var existing in existingAnswers)
+        foreach (var qId in questionIds)
         {
-            if (!answers.TryGetValue(existing.QuestionId, out var optionId) || !optionId.HasValue)
+            if (!questions.TryGetValue(qId, out var q)) continue;
+
+            int? optionId = null;
+            string? textResponse = null;
+            bool? isCorrect = false;
+
+            if (q.QuestionType == "Essay" || q.QuestionType == "FillInTheBlank")
             {
-                _db.UserAnswers.Remove(existing);
-                continue;
+                if (textAnswers != null && textAnswers.TryGetValue(qId, out var tr))
+                {
+                    textResponse = tr;
+                    if (q.QuestionType == "FillInTheBlank")
+                    {
+                        var correctOpts = q.QuestionOptions.Where(o => o.IsCorrect == true).Select(o => o.OptionText?.Trim().ToLower()).ToList();
+                        isCorrect = !string.IsNullOrWhiteSpace(textResponse) && correctOpts.Any(opt => opt != null && opt == textResponse.Trim().ToLower());
+                    }
+                    else if (q.QuestionType == "Essay")
+                    {
+                        isCorrect = !string.IsNullOrWhiteSpace(textResponse);
+                    }
+                }
+            }
+            else
+            {
+                if (answers != null && answers.TryGetValue(qId, out var optId) && optId.HasValue)
+                {
+                    optionId = optId.Value;
+                    var opt = q.QuestionOptions.FirstOrDefault(o => o.OptionId == optionId.Value);
+                    isCorrect = opt?.IsCorrect == true;
+                }
             }
 
-            existing.OptionId = optionId.Value;
-            existing.IsCorrect = correctLookup.TryGetValue(optionId.Value, out var isCorrect) && isCorrect;
+            if (existingAnswers.TryGetValue(qId, out var existing))
+            {
+                existing.OptionId = optionId;
+                existing.TextResponse = textResponse;
+                existing.IsCorrect = isCorrect;
+            }
+            else
+            {
+                _db.UserAnswers.Add(new UserAnswer
+                {
+                    UserExamId = userExamId,
+                    QuestionId = qId,
+                    OptionId = optionId,
+                    TextResponse = textResponse,
+                    IsCorrect = isCorrect
+                });
+            }
         }
 
-        var existingQuestionIds = existingAnswers.Select(a => a.QuestionId).ToHashSet();
-        foreach (var answer in answers)
+        var qIdsSet = questionIds.ToHashSet();
+        foreach (var existingKey in existingAnswers.Keys)
         {
-            if (!answer.Value.HasValue || existingQuestionIds.Contains(answer.Key)) continue;
-
-            _db.UserAnswers.Add(new UserAnswer
+            if (!qIdsSet.Contains(existingKey))
             {
-                UserExamId = userExamId,
-                QuestionId = answer.Key,
-                OptionId = answer.Value.Value,
-                IsCorrect = correctLookup.TryGetValue(answer.Value.Value, out var isCorrect) && isCorrect
-            });
+                _db.UserAnswers.Remove(existingAnswers[existingKey]);
+            }
         }
     }
 
@@ -2212,6 +2417,7 @@ public class SaveQuizStateDto
     public int CurrentQuestionIndex { get; set; }
     public int RemainingSeconds { get; set; }
     public Dictionary<int, int?>? Answers { get; set; }
+    public Dictionary<int, string>? TextAnswers { get; set; }
 }
 
 public class SubmitQuizDto
@@ -2220,6 +2426,7 @@ public class SubmitQuizDto
     public int CurrentQuestionIndex { get; set; }
     public int RemainingSeconds { get; set; }
     public Dictionary<int, int?>? Answers { get; set; }
+    public Dictionary<int, string>? TextAnswers { get; set; }
 }
 
 public record CourseEvaluationResult(

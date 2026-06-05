@@ -28,7 +28,7 @@ builder.Services.AddHttpClient<KhoaHoc.Services.IAIService, KhoaHoc.Services.Gem
 builder.Services.AddControllersWithViews();
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 1024L * 1024L * 1024L;
+    options.MultipartBodyLengthLimit = 10L * 1024L * 1024L * 1024L; // 10 GB
 });
 
 var keysPath = Path.Combine(builder.Environment.WebRootPath ?? builder.Environment.ContentRootPath, "App_Data", "Keys");

@@ -92,8 +92,6 @@
                 <div class="nav-section-label">Kết quả & đánh giá</div>
                 <div class="nav-item"><a class="nav-link" href="#" data-page="exam-history"><span class="nav-icon">📝</span><span>Lịch sử thi</span></a></div>
                 <div class="nav-item"><a class="nav-link" href="#" data-page="certificates"><span class="nav-icon">🏅</span><span>Chứng chỉ</span></a></div>
-                <div class="nav-item"><a class="nav-link" href="#" data-page="achievements"><span class="nav-icon">⭐</span><span>Thành tích</span></a></div>
-                <div class="nav-item"><a class="nav-link" href="#" data-page="surveys"><span class="nav-icon">📋</span><span>Khảo sát</span></a></div>
                 <div class="nav-section-label">Tài khoản</div>
                 <div class="nav-item"><a class="nav-link" href="#" data-page="notifications"><span class="nav-icon">🔔</span><span>Thông báo</span><span class="nav-badge" id="notifBadge">0</span></a></div>
                 <div class="nav-item"><a class="nav-link" href="#" data-page="profile"><span class="nav-icon">👤</span><span>Hồ sơ cá nhân</span></a></div>
@@ -144,8 +142,6 @@
                 </section>
                 <section class="page-section" id="exam-history" style="display:none"><div class="card"><div class="card-header"><div><div class="card-title">Lịch sử thi</div><div class="card-subtitle">Kết quả các bài kiểm tra đã thực hiện.</div></div></div><div class="card-body"><div class="table-wrapper"><table class="lms-table"><thead><tr><th>Bài kiểm tra</th><th>Khóa học</th><th>Kết quả (%)</th><th>Trạng thái</th><th>Thời gian</th><th>Hành động</th></tr></thead><tbody id="examHistoryBody"></tbody></table></div></div></div></section>
                 <section class="page-section" id="certificates" style="display:none"><div class="card"><div class="card-header"><div><div class="card-title">Chứng chỉ</div><div class="card-subtitle">Danh sách chứng chỉ đã nhận.</div></div></div><div class="card-body"><div class="course-grid" id="certificatesList"></div></div></div></section>
-                <section class="page-section" id="achievements" style="display:none"><div class="student-grid"><div class="card"><div class="card-header"><div><div class="card-title">Huy hiệu & điểm thưởng</div><div class="card-subtitle">Các mốc thành tích cá nhân.</div></div></div><div class="card-body"><div class="stats-grid" id="achievementStats"></div><div class="badge-grid" id="badgesList"></div></div></div><div class="card"><div class="card-header"><div><div class="card-title">Bảng xếp hạng</div><div class="card-subtitle">Top điểm số hiện tại.</div></div></div><div class="card-body rank-list" id="leaderboardList"></div></div></div></section>
-                <section class="page-section" id="surveys" style="display:none"><div class="card"><div class="card-header"><div><div class="card-title">Khảo sát</div><div class="card-subtitle">Hoàn thành khảo sát còn hiệu lực.</div></div></div><div class="card-body"><div class="survey-grid" id="surveysList"></div></div></div></section>
                 <section class="page-section" id="notifications" style="display:none"><div class="card"><div class="card-header"><div><div class="card-title">Thông báo</div><div class="card-subtitle">Danh sách thông báo gần đây.</div></div><button class="btn btn-secondary btn-sm" type="button" onclick="markAllNotifRead()">Đánh dấu đã đọc tất cả</button></div><div class="card-body"><div class="notif-grid" id="notificationsList"></div></div></div></section>
                 <section class="page-section" id="profile" style="display:none"><div class="student-grid"><div class="card"><div class="card-header"><div><div class="card-title">Hồ sơ cá nhân</div><div class="card-subtitle">Cập nhật họ tên và email.</div></div></div><div class="card-body"><div class="form-grid"><input class="field" id="profileFullName" placeholder="Họ và tên" /><input class="field" id="profileEmail" placeholder="Email" /><input class="field" id="profileUsername" placeholder="Tên đăng nhập" disabled /><input class="field" id="profileEmployeeCode" placeholder="Mã nhân viên" disabled /><input class="field" id="profileDepartment" placeholder="Phòng ban" disabled /><input class="field" id="profileJobTitle" placeholder="Chức danh" disabled /></div><div class="card-actions"><button class="btn btn-primary" type="button" onclick="saveProfile()">Lưu hồ sơ</button></div></div></div><div class="card"><div class="card-header"><div><div class="card-title">Đổi mật khẩu</div><div class="card-subtitle">Mật khẩu mới tối thiểu 6 ký tự.</div></div></div><div class="card-body"><div class="form-grid"><input class="field wide" id="oldPassword" type="password" placeholder="Mật khẩu hiện tại" /><input class="field wide" id="newPassword" type="password" placeholder="Mật khẩu mới" /><input class="field wide" id="confirmPassword" type="password" placeholder="Nhập lại mật khẩu mới" /></div><div class="card-actions"><button class="btn btn-primary" type="button" onclick="changePassword()">Đổi mật khẩu</button></div></div></div></div></section>
             </main>
@@ -183,24 +179,6 @@
                 </div>
                 <div class="card-footer" style="padding: 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; background: #fff; border-radius: 0 0 20px 20px;">
                     <button class="btn btn-secondary" type="button" onclick="closeModal('reviewModal')" style="padding: 12px 32px;">Đóng giao diện xem lại</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="modal-backdrop" id="surveyModal">
-        <div class="modal-card card">
-            <div class="card-header">
-                <div>
-                    <div class="card-title" id="surveyModalTitle">Khảo sát</div>
-                    <div class="card-subtitle">Đánh giá nhanh trải nghiệm học tập của bạn.</div>
-                </div>
-                <button class="btn btn-secondary btn-icon" type="button" onclick="closeModal('surveyModal')">×</button>
-            </div>
-            <div class="card-body">
-                <div class="stars" id="surveyStars"></div>
-                <textarea class="textarea" id="surveyAnswer" placeholder="Nhập phản hồi của bạn..."></textarea>
-                <div class="card-actions">
-                    <button class="btn btn-primary" type="button" onclick="submitSurvey()">Gửi khảo sát</button>
                 </div>
             </div>
         </div>
@@ -261,13 +239,11 @@
             'study-schedule': { title: 'Lịch học tập', subtitle: 'Lịch offline, lịch thi và hoạt động gần nhất.' },
             'exam-history': { title: 'Lịch sử thi', subtitle: 'Toàn bộ kết quả kiểm tra đã thực hiện.' },
             certificates: { title: 'Chứng chỉ', subtitle: 'Các chứng chỉ đã được cấp cho bạn.' },
-            achievements: { title: 'Thành tích', subtitle: 'Điểm thưởng, huy hiệu và bảng xếp hạng.' },
-            surveys: { title: 'Khảo sát', subtitle: 'Các khảo sát đang mở để bạn phản hồi.' },
             notifications: { title: 'Thông báo', subtitle: 'Theo dõi cập nhật mới nhất từ hệ thống.' },
             profile: { title: 'Hồ sơ cá nhân', subtitle: 'Quản lý thông tin cá nhân và mật khẩu.' }
         };
 
-        const state = { notifications: [], offlineEvents: [], examHistory: [], selectedSurveyId: null, selectedSurveyRating: 5, scheduleItems: [], scheduleMonth: new Date() };
+        const state = { notifications: [], offlineEvents: [], examHistory: [], scheduleItems: [], scheduleMonth: new Date() };
 
         function renderEmpty(message) {
             return `<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">Chưa có dữ liệu</div><div class="empty-desc">${escapeHtml(message)}</div></div>`;
@@ -315,8 +291,6 @@
             if (pageId === 'study-schedule') return loadStudySchedule();
             if (pageId === 'exam-history') return loadExamHistory();
             if (pageId === 'certificates') return loadCertificates();
-            if (pageId === 'achievements') return loadAchievements();
-            if (pageId === 'surveys') return loadSurveys();
             if (pageId === 'notifications') return loadNotifications();
             if (pageId === 'profile') return loadProfile();
             return loadDashboard();
@@ -344,9 +318,7 @@
                 statCard('📘', 'blue', dashboard.totalEnrolled, 'Khóa đã ghi danh'),
                 statCard('⏳', 'cyan', dashboard.inProgress, 'Đang học'),
                 statCard('✅', 'green', dashboard.completed, 'Hoàn thành'),
-                statCard('🏅', 'orange', dashboard.certificates, 'Chứng chỉ'),
-                statCard('⭐', 'purple', dashboard.totalPoints, 'Điểm thưởng'),
-                statCard('🎖️', 'red', dashboard.badges, 'Huy hiệu')
+                statCard('🏅', 'orange', dashboard.certificates, 'Chứng chỉ')
             ].join('');
 
             document.getElementById('recentCoursesWrap').innerHTML = (dashboard.recentCourses?.length ?? 0)
@@ -552,7 +524,9 @@
                             <div class="meta-line">⏰ Thời gian làm bài: ${q.durationMinutes} phút</div>
                             <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center">
                                 <div style="font-size:12px; font-weight:700; color:#d97706;">Sẽ mở lúc: ${fmtDateTime(q.startTime)}</div>
-                                <a class="btn btn-primary btn-sm" href="/Student/Learn/${q.courseId}">Vào chuẩn bị</a>
+                                ${q.courseId > 0 ? 
+                                    `<a class="btn btn-primary btn-sm" href="/Student/Learn/${q.courseId}">Vào chuẩn bị</a>` :
+                                    `<a class="btn btn-warning btn-sm" href="/Student/Quiz/0/${q.examId}">Làm bài ngay</a>`}
                             </div>
                         </div>
                     </div>`).join('') : renderEmpty('Chưa có lịch thi nào sắp tới.');
@@ -566,6 +540,19 @@
                         <div style="font-size:12px; color:var(--text-secondary)">${fmtDateTime(item.startTime)}</div>
                     </div>`).join('') || renderEmpty('Chưa có lịch học.');
                 document.getElementById('dashboardSchedule').innerHTML = dashHtml;
+                
+                // Populate scheduleItems for calendar
+                state.scheduleItems = [
+                    ...offlineEvents.map(ev => ({
+                        date: ev.startTime,
+                        title: `Lịch học: ${ev.courseTitle}`
+                    })),
+                    ...upcomingQuizzes.map(q => ({
+                        date: q.startTime,
+                        title: `Bài kiểm tra: ${q.title}`
+                    }))
+                ];
+                renderStudyScheduleCalendar();
 
             } catch (e) { console.error(e); }
         }
@@ -682,18 +669,41 @@
 
                 const html = data.questions.map((q, idx) => {
                     const isCorrect = q.isCorrect;
-                    return `
-                        <div class="glass-card" style="padding: 28px; border-left: 6px solid ${isCorrect ? '#22c55e' : '#ef4444'}; background: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
-                                <div style="flex: 1;">
-                                    <div style="font-size: 13px; font-weight: 800; color: var(--brand); text-transform: uppercase; margin-bottom: 8px;">CÂU HỎI ${idx + 1}</div>
-                                    <h3 style="font-size: 18px; font-weight: 700; color: var(--ink); line-height: 1.5; margin: 0;">${escapeHtml(q.questionText)}</h3>
+                    let optionsHtml = '';
+
+                    if (q.questionType === 'Essay') {
+                        const studentText = q.selectedTextResponse || '(Không trả lời)';
+                        optionsHtml = `
+                            <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
+                                <div style="padding: 16px 20px; border-radius: 14px; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155;">
+                                    <div style="font-size: 11px; font-weight: 800; color: #64748b; margin-bottom: 4px; text-transform: uppercase;">Bài làm tự luận:</div>
+                                    <div style="font-size: 15px; line-height: 1.6; white-space: pre-wrap; font-weight: 600;">${escapeHtml(studentText)}</div>
                                 </div>
-                                <div style="padding: 8px 16px; border-radius: 12px; font-weight: 800; font-size: 12px; border: 1px solid ${isCorrect ? '#22c55e' : '#ef4444'}; color: ${isCorrect ? '#16a34a' : '#dc2626'}; background: ${isCorrect ? '#f0fdf4' : '#fef2f2'};">
-                                    ${isCorrect ? 'CHÍNH XÁC ✓' : 'CHƯA ĐÚNG ✗'}
+                                <div style="font-size: 12px; color: #64748b; font-style: italic;">
+                                    ℹ️ Câu trả lời tự luận được ghi nhận và đánh giá hoàn thành.
                                 </div>
-                            </div>
-                            <div style="display: grid; gap: 12px;">
+                            </div>`;
+                    } else if (q.questionType === 'FillInTheBlank') {
+                        const correctText = q.correctOptionText || '';
+                        const studentText = q.selectedTextResponse || '(Không trả lời)';
+                        const labelBorder = isCorrect ? '2px solid #22c55e' : '2px solid #ef4444';
+                        const labelBg = isCorrect ? '#f0fdf4' : '#fef2f2';
+                        const labelColor = isCorrect ? '#16a34a' : '#b91c1c';
+                        
+                        optionsHtml = `
+                            <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
+                                <div style="padding: 16px 20px; border-radius: 14px; border: ${labelBorder}; background: ${labelBg}; color: ${labelColor};">
+                                    <div style="font-size: 11px; font-weight: 800; opacity: 0.8; margin-bottom: 4px; text-transform: uppercase;">Câu trả lời của bạn:</div>
+                                    <div style="font-size: 15px; font-weight: 700;">${escapeHtml(studentText)}</div>
+                                </div>
+                                <div style="padding: 16px 20px; border-radius: 14px; border: 1px dashed #22c55e; background: #fff; color: #16a34a;">
+                                    <div style="font-size: 11px; font-weight: 800; opacity: 0.8; margin-bottom: 4px; text-transform: uppercase;">Đáp án chấp nhận:</div>
+                                    <div style="font-size: 15px; font-weight: 700;">${escapeHtml(correctText)}</div>
+                                </div>
+                            </div>`;
+                    } else {
+                        optionsHtml = `
+                            <div style="display: grid; gap: 12px; margin-top: 16px;">
                                 ${q.options.map(o => {
                                     let border = "1px solid var(--border)";
                                     let bg = "#fff";
@@ -716,7 +726,27 @@
                                             ${tag}
                                         </div>`;
                                 }).join('')}
+                            </div>`;
+                    }
+
+                    const typeLabel = q.questionType === 'MultipleChoice' ? 'Trắc nghiệm' : q.questionType === 'Essay' ? 'Tự luận' : 'Điền từ';
+                    const typeBadge = q.questionType === 'MultipleChoice' ? 'badge-blue' : q.questionType === 'Essay' ? 'badge-purple' : 'badge-orange';
+
+                    return `
+                        <div class="glass-card" style="padding: 28px; border-left: 6px solid ${isCorrect ? '#22c55e' : '#ef4444'}; background: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px; border-radius: 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+                                <div style="flex: 1;">
+                                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                        <div style="font-size: 13px; font-weight: 800; color: var(--brand); text-transform: uppercase;">CÂU HỎI ${idx + 1}</div>
+                                        <span class="badge ${typeBadge}" style="font-size: 10px; padding: 2px 6px;">${typeLabel}</span>
+                                    </div>
+                                    <h3 style="font-size: 18px; font-weight: 700; color: var(--ink); line-height: 1.5; margin: 0;">${escapeHtml(q.questionText)}</h3>
+                                </div>
+                                <div style="padding: 8px 16px; border-radius: 12px; font-weight: 800; font-size: 12px; border: 1px solid ${isCorrect ? '#22c55e' : '#ef4444'}; color: ${isCorrect ? '#16a34a' : '#dc2626'}; background: ${isCorrect ? '#f0fdf4' : '#fef2f2'}; flex-shrink: 0; margin-left: 16px;">
+                                    ${isCorrect ? 'CHÍNH XÁC ✓' : 'CHƯA ĐÚNG ✗'}
+                                </div>
                             </div>
+                            ${optionsHtml}
                         </div>`;
                 }).join('');
                 
@@ -735,57 +765,6 @@
                     <div class="meta-line">Mã chứng chỉ: ${escapeHtml(c.certCode || '--')}</div>
                     <div class="meta-line">Ngày cấp: ${fmtDate(c.issueDate)}</div>
                 </div>`).join('') : renderEmpty('Bạn chưa có chứng chỉ nào.');
-        }
-
-        async function loadAchievements() {
-            const data = await apiFetch('/api/student/achievements');
-            document.getElementById('achievementStats').innerHTML = [
-                statCard('⭐', 'purple', data.totalPoints || 0, 'Tổng điểm'),
-                statCard('🎖️', 'orange', data.badges?.length || 0, 'Huy hiệu'),
-                statCard('🏆', 'blue', data.leaderboard?.length || 0, 'Top xếp hạng')
-            ].join('');
-            document.getElementById('badgesList').innerHTML = (data.badges?.length ?? 0) ? data.badges.map(b => `
-                <div class="badge-card">
-                    <h3>${escapeHtml(b.badgeName || 'Huy hiệu')}</h3>
-                    <div class="meta-line">${escapeHtml(b.description || '--')}</div>
-                    <div class="meta-line">Nhận ngày ${fmtDate(b.earnedDate)}</div>
-                </div>`).join('') : renderEmpty('Bạn chưa có huy hiệu nào.');
-            document.getElementById('leaderboardList').innerHTML = (data.leaderboard?.length ?? 0) ? data.leaderboard.map((u, idx) => `
-                <div class="rank-item"><div><strong>#${idx + 1}</strong> ${escapeHtml(u.fullName || 'N/A')}</div><div class="badge badge-blue">${fmtNumber(u.totalPoints || 0)} điểm</div></div>`).join('') : renderEmpty('Chưa có dữ liệu xếp hạng.');
-        }
-
-        async function loadSurveys() {
-            const data = await apiFetch('/api/student/surveys');
-            document.getElementById('surveysList').innerHTML = data.length ? data.map(s => `
-                <div class="survey-card">
-                    <h3>${escapeHtml(s.title || 'Khảo sát')}</h3>
-                    <div class="meta-line">${escapeHtml(s.description || '--')}</div>
-                    <div class="meta-line">Hạn: ${fmtDate(s.expiredDate)}</div>
-                    <div class="card-actions">${s.isCompleted ? '<span class="badge badge-success">Đã hoàn thành</span>' : s.isExpired ? '<span class="badge badge-danger">Đã hết hạn</span>' : `<button class="btn btn-primary btn-sm" type="button" onclick="openSurveyModal(${s.surveyId}, ${JSON.stringify(s.title || '')})">Trả lời khảo sát</button>`}</div>
-                </div>`).join('') : renderEmpty('Hiện chưa có khảo sát nào.');
-        }
-
-        function openSurveyModal(surveyId, title) {
-            state.selectedSurveyId = surveyId;
-            state.selectedSurveyRating = 5;
-            document.getElementById('surveyModalTitle').textContent = title || 'Khảo sát';
-            document.getElementById('surveyAnswer').value = '';
-            document.getElementById('surveyStars').innerHTML = Array.from({ length: 5 }, (_, i) => `<span class="star ${i < 5 ? 'active' : ''}" onclick="setSurveyRating(${i + 1})">★</span>`).join('');
-            openModal('surveyModal');
-        }
-
-        function setSurveyRating(value) {
-            state.selectedSurveyRating = value;
-            document.querySelectorAll('#surveyStars .star').forEach((star, idx) => star.classList.toggle('active', idx < value));
-        }
-
-        async function submitSurvey() {
-            if (!state.selectedSurveyId) return;
-            const answerData = JSON.stringify({ rating: state.selectedSurveyRating, comment: document.getElementById('surveyAnswer').value.trim() });
-            await apiFetch(`/api/student/surveys/${state.selectedSurveyId}/submit`, { method: 'POST', body: JSON.stringify({ answerData }) });
-            closeModal('surveyModal');
-            showToast('Gửi khảo sát thành công.');
-            await loadSurveys();
         }
 
         async function loadNotifications(silent) {

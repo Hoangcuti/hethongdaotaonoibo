@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -21,6 +21,8 @@ public partial class UserAnswer
     public int? OptionId { get; set; }
 
     public bool? IsCorrect { get; set; }
+
+    public string? TextResponse { get; set; }
 
     [ForeignKey("UserExamId")]
     public virtual UserExam? UserExam { get; set; }

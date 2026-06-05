@@ -341,10 +341,11 @@ public class HRController : Controller
             .Where(u => u.UserId != currentUserId)
             .AsQueryable();
 
-        if (currentDeptId > 0)
+        var isTrainingCenter = IsTrainingCenter();
+        if (currentDeptId > 0 && !isTrainingCenter)
             query = query.Where(u => u.DepartmentId == currentDeptId);
-        else if (departmentId.HasValue)
-            query = query.Where(u => u.DepartmentId == departmentId);
+        else if (departmentId.HasValue && departmentId.Value > 0)
+            query = query.Where(u => u.DepartmentId == departmentId.Value);
 
         var employees = await query
             .Select(u => new
@@ -1534,6 +1535,540 @@ public class HRController : Controller
         }
         return str;
     }
+
+    [HttpGet("/api/hr/questions-pool")]
+    public async Task<IActionResult> GetQuestionsPool()
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var questions = await _db.QuestionBanks
+            .Include(q => q.QuestionOptions)
+            .OrderByDescending(q => q.QuestionId)
+            .Select(q => new
+            {
+                questionId = q.QuestionId,
+                questionText = q.QuestionText,
+                questionType = q.QuestionType ?? "MultipleChoice",
+                difficulty = q.Difficulty ?? "Medium",
+                options = q.QuestionOptions.OrderBy(o => o.OptionId).Select(o => new
+                {
+                    optionId = o.OptionId,
+                    optionText = o.OptionText,
+                    isCorrect = o.IsCorrect ?? false
+                }).ToList()
+            })
+            .ToListAsync();
+
+        return Json(questions);
+    }
+
+    [HttpPost("/api/hr/questions-pool")]
+    public async Task<IActionResult> CreateQuestionInPool([FromBody] QuestionPoolItemDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        if (string.IsNullOrWhiteSpace(dto.QuestionText))
+            return BadRequest(new { error = "Nội dung câu hỏi là bắt buộc." });
+
+        try
+        {
+            var strategy = _db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync<IActionResult>(async () =>
+            {
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    var q = new QuestionBank
+                    {
+                        QuestionText = dto.QuestionText.Trim(),
+                        QuestionType = dto.QuestionType ?? "MultipleChoice",
+                        Difficulty = dto.Difficulty ?? "Medium"
+                    };
+                    _db.QuestionBanks.Add(q);
+                    await _db.SaveChangesAsync();
+
+                    if (dto.Options != null && (dto.QuestionType == "MultipleChoice" || dto.QuestionType == "FillInTheBlank"))
+                    {
+                        foreach (var opt in dto.Options)
+                        {
+                            if (string.IsNullOrWhiteSpace(opt.OptionText)) continue;
+                            _db.QuestionOptions.Add(new QuestionOption
+                            {
+                                QuestionId = q.QuestionId,
+                                OptionText = opt.OptionText.Trim(),
+                                IsCorrect = opt.IsCorrect
+                            });
+                        }
+                        await _db.SaveChangesAsync();
+                    }
+
+                    await transaction.CommitAsync();
+                    return Ok(new { success = true, questionId = q.QuestionId });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi tạo câu hỏi: " + ex.Message });
+        }
+    }
+
+    [HttpPut("/api/hr/questions-pool/{id}")]
+    public async Task<IActionResult> UpdateQuestionInPool(int id, [FromBody] QuestionPoolItemDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var q = await _db.QuestionBanks.Include(x => x.QuestionOptions).FirstOrDefaultAsync(x => x.QuestionId == id);
+        if (q == null) return NotFound();
+
+        if (string.IsNullOrWhiteSpace(dto.QuestionText))
+            return BadRequest(new { error = "Nội dung câu hỏi là bắt buộc." });
+
+        try
+        {
+            var strategy = _db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync<IActionResult>(async () =>
+            {
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    q.QuestionText = dto.QuestionText.Trim();
+                    q.QuestionType = dto.QuestionType ?? "MultipleChoice";
+                    q.Difficulty = dto.Difficulty ?? "Medium";
+
+                    // Remove old options
+                    _db.QuestionOptions.RemoveRange(q.QuestionOptions);
+                    await _db.SaveChangesAsync();
+
+                    if (dto.Options != null && (dto.QuestionType == "MultipleChoice" || dto.QuestionType == "FillInTheBlank"))
+                    {
+                        foreach (var opt in dto.Options)
+                        {
+                            if (string.IsNullOrWhiteSpace(opt.OptionText)) continue;
+                            _db.QuestionOptions.Add(new QuestionOption
+                            {
+                                QuestionId = q.QuestionId,
+                                OptionText = opt.OptionText.Trim(),
+                                IsCorrect = opt.IsCorrect
+                            });
+                        }
+                        await _db.SaveChangesAsync();
+                    }
+
+                    await transaction.CommitAsync();
+                    return Ok(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi cập nhật câu hỏi: " + ex.Message });
+        }
+    }
+
+    [HttpDelete("/api/hr/questions-pool/{id}")]
+    public async Task<IActionResult> DeleteQuestionInPool(int id)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var q = await _db.QuestionBanks.FindAsync(id);
+        if (q == null) return NotFound();
+
+        try
+        {
+            var strategy = _db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync<IActionResult>(async () =>
+            {
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    // Remove options
+                    var options = await _db.QuestionOptions.Where(o => o.QuestionId == id).ToListAsync();
+                    _db.QuestionOptions.RemoveRange(options);
+
+                    // Remove links to exams
+                    var links = await _db.ExamQuestions.Where(eq => eq.QuestionId == id).ToListAsync();
+                    _db.ExamQuestions.RemoveRange(links);
+
+                    // Remove student answers
+                    var answers = await _db.UserAnswers.Where(a => a.QuestionId == id).ToListAsync();
+                    _db.UserAnswers.RemoveRange(answers);
+
+                    _db.QuestionBanks.Remove(q);
+                    await _db.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+                    return Ok(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi xóa câu hỏi: " + ex.Message });
+        }
+    }
+
+    [HttpGet("/api/hr/exams-with-stats")]
+    public async Task<IActionResult> GetExamsWithStats()
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var userDeptId = GetCurrentDeptId();
+        var isTrainingCenter = IsTrainingCenter();
+
+        var exams = await _db.Exams
+            .Include(e => e.Course)
+            .Include(e => e.ExamQuestions)
+            .Include(e => e.UserExams)
+                .ThenInclude(ue => ue.User)
+            .OrderByDescending(e => e.ExamId)
+            .Select(e => new
+            {
+                examId = e.ExamId,
+                examTitle = e.ExamTitle,
+                durationMinutes = e.DurationMinutes ?? 30,
+                passScore = e.PassScore ?? 50m,
+                maxAttempts = e.MaxAttempts,
+                courseId = e.CourseId,
+                courseTitle = e.Course != null ? e.Course.Title : null,
+                questionsCount = e.ExamQuestions.Count,
+                passedCount = e.UserExams.Count(ue => ue.IsFinish == true && (ue.Score ?? 0) >= (e.PassScore ?? 50m) && (isTrainingCenter || (ue.User != null && ue.User.DepartmentId == userDeptId))),
+                failedCount = e.UserExams.Count(ue => ue.IsFinish == true && (ue.Score ?? 0) < (e.PassScore ?? 50m) && (isTrainingCenter || (ue.User != null && ue.User.DepartmentId == userDeptId)))
+            })
+            .ToListAsync();
+
+        return Json(exams);
+    }
+
+    [HttpGet("/api/hr/exams/{examId}/questions")]
+    public async Task<IActionResult> GetExamQuestions(int examId)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var questions = await _db.ExamQuestions
+            .Include(eq => eq.Question)
+                .ThenInclude(q => q.QuestionOptions)
+            .Where(eq => eq.ExamId == examId)
+            .Select(eq => new {
+                eq.QuestionId, 
+                eq.Points,
+                questionText = eq.Question.QuestionText,
+                questionType = eq.Question.QuestionType ?? "MultipleChoice",
+                Options = eq.Question.QuestionOptions.Select(o => new { o.OptionId, o.OptionText, o.IsCorrect }).ToList()
+            }).ToListAsync();
+
+        return Json(questions);
+    }
+
+    [HttpPost("/api/hr/exams/{examId}/save-structure")]
+    public async Task<IActionResult> SaveExamStructure(int examId, [FromBody] List<int> questionIds)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var exam = await _db.Exams.FindAsync(examId);
+        if (exam == null) return NotFound(new { error = "Không tìm thấy bài thi." });
+
+        try
+        {
+            var strategy = _db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync<IActionResult>(async () =>
+            {
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    var oldLinks = await _db.ExamQuestions.Where(eq => eq.ExamId == examId).ToListAsync();
+                    _db.ExamQuestions.RemoveRange(oldLinks);
+                    await _db.SaveChangesAsync();
+
+                    foreach (var qId in questionIds)
+                    {
+                        _db.ExamQuestions.Add(new ExamQuestion
+                        {
+                            ExamId = examId,
+                            QuestionId = qId,
+                            Points = 10 // Default points per question
+                        });
+                    }
+                    await _db.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+                    return Ok(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi lưu cấu trúc bài thi: " + ex.Message });
+        }
+    }
+
+    [HttpGet("/api/hr/exams/{examId}/participants")]
+    public async Task<IActionResult> GetExamParticipants(int examId)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var exam = await _db.Exams.Include(e => e.Course).FirstOrDefaultAsync(e => e.ExamId == examId);
+        if (exam == null) return NotFound(new { error = "Không tìm thấy bài thi." });
+
+        var courseId = exam.CourseId;
+        
+        var userExams = await _db.UserExams
+            .Include(ue => ue.User)
+                .ThenInclude(u => u.Department)
+            .Where(ue => ue.ExamId == examId)
+            .ToListAsync();
+
+        var enrollments = new List<Enrollment>();
+        if (courseId.HasValue)
+        {
+            enrollments = await _db.Enrollments
+                .Include(e => e.User)
+                    .ThenInclude(u => u.Department)
+                .Where(e => e.CourseId == courseId && e.User != null && e.User.Status == "Active")
+                .ToListAsync();
+        }
+
+        int userDeptId = GetCurrentDeptId();
+        bool isTrainingCenter = IsTrainingCenter();
+        if (!isTrainingCenter)
+        {
+            enrollments = enrollments.Where(e => e.User != null && e.User.DepartmentId == userDeptId).ToList();
+            userExams = userExams.Where(ue => ue.User != null && ue.User.DepartmentId == userDeptId).ToList();
+        }
+
+        var allUsersMap = new Dictionary<int, User>();
+        foreach (var e in enrollments)
+        {
+            if (e.User != null && !allUsersMap.ContainsKey(e.User.UserId))
+            {
+                allUsersMap[e.User.UserId] = e.User;
+            }
+        }
+        foreach (var ue in userExams)
+        {
+            if (ue.User != null && !allUsersMap.ContainsKey(ue.User.UserId))
+            {
+                allUsersMap[ue.User.UserId] = ue.User;
+            }
+        }
+
+        var passScore = exam.PassScore ?? 50m;
+        var sortedUsers = allUsersMap.Values.OrderBy(u => u.FullName ?? "").ToList();
+        var participants = new List<object>();
+
+        foreach (var user in sortedUsers)
+        {
+            var attempts = userExams.Where(ue => ue.UserId == user.UserId).ToList();
+            
+            string statusText = "Chưa làm";
+            string statusClass = "secondary";
+            decimal? score = null;
+            DateTime? endTime = null;
+
+            if (attempts.Any(a => a.IsFinish == true))
+            {
+                var finishedAttempts = attempts.Where(a => a.IsFinish == true).ToList();
+                var bestAttempt = finishedAttempts.OrderByDescending(a => a.Score).First();
+                score = bestAttempt.Score;
+                endTime = bestAttempt.EndTime;
+
+                if (score >= passScore)
+                {
+                    statusText = "Đạt";
+                    statusClass = "success";
+                }
+                else
+                {
+                    statusText = "Không đạt";
+                    statusClass = "danger";
+                }
+            }
+            else if (attempts.Any())
+            {
+                statusText = "Đang làm";
+                statusClass = "warning";
+            }
+
+            participants.Add(new
+            {
+                employeeCode = user.EmployeeCode,
+                fullName = user.FullName ?? "N/A",
+                departmentName = user.Department?.DepartmentName ?? "N/A",
+                score = score,
+                statusText = statusText,
+                statusClass = statusClass,
+                endTime = endTime
+            });
+        }
+
+        return Json(participants);
+    }
+
+    [HttpPost("/api/hr/courses/{courseId}/exams")]
+    public async Task<IActionResult> CreateExam(int courseId, [FromBody] ItCreateExamDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        if (string.IsNullOrWhiteSpace(dto.ExamTitle))
+            return BadRequest(new { error = "Tên quiz là bắt buộc." });
+
+        try
+        {
+            var strategy = _db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync<IActionResult>(async () =>
+            {
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    int? effectiveCourseId = courseId > 0 ? courseId : null;
+                    
+                    if (await _db.Exams.AnyAsync(e => e.ExamTitle != null && e.ExamTitle.ToLower() == dto.ExamTitle.Trim().ToLower()))
+                    {
+                       return BadRequest(new { error = $"Không thể tạo: Tiêu đề quiz '{dto.ExamTitle.Trim()}' đã tồn tại trong hệ thống. Vui lòng chọn tên khác." });
+                    }
+
+                    var exam = new Exam 
+                    { 
+                        CourseId = effectiveCourseId, 
+                        ExamTitle = dto.ExamTitle.Trim(), 
+                        DurationMinutes = dto.DurationMinutes, 
+                        PassScore = dto.PassScore, 
+                        Level = dto.Level, 
+                        MaxAttempts = dto.MaxAttempts, 
+                        StartDate = dto.StartDate, 
+                        EndDate = dto.EndDate, 
+                        TargetDepartmentId = dto.TargetDepartmentId 
+                    };
+                    
+                    _db.Exams.Add(exam);
+                    await _db.SaveChangesAsync();
+
+                    if (dto.AiQuestions != null && dto.AiQuestions.Any())
+                    {
+                        foreach (var qDto in dto.AiQuestions)
+                        {
+                            if (string.IsNullOrWhiteSpace(qDto.QuestionText)) continue;
+
+                            var q = new QuestionBank { 
+                                QuestionText = qDto.QuestionText.Trim(), 
+                                Difficulty = "Medium" 
+                            };
+                            _db.QuestionBanks.Add(q);
+                            await _db.SaveChangesAsync();
+
+                            if (qDto.Options != null)
+                            {
+                                foreach (var opt in qDto.Options)
+                                {
+                                    if (string.IsNullOrWhiteSpace(opt.OptionText)) continue;
+                                    _db.QuestionOptions.Add(new QuestionOption { 
+                                        QuestionId = q.QuestionId, 
+                                        OptionText = opt.OptionText.Trim(), 
+                                        IsCorrect = opt.IsCorrect 
+                                    });
+                                }
+                            }
+                            
+                            _db.ExamQuestions.Add(new ExamQuestion { 
+                                ExamId = exam.ExamId, 
+                                QuestionId = q.QuestionId, 
+                                Points = qDto.Points 
+                            });
+                        }
+                        await _db.SaveChangesAsync();
+                    }
+
+                    // Send notification to target employees
+                    var targetUserIds = new List<int>();
+                    if (exam.TargetDepartmentId.HasValue && exam.TargetDepartmentId.Value > 0)
+                    {
+                        targetUserIds = await _db.Users
+                            .Where(u => u.DepartmentId == exam.TargetDepartmentId.Value && u.Status == "Active")
+                            .Select(u => u.UserId)
+                            .ToListAsync();
+                    }
+                    else if (exam.CourseId.HasValue && exam.CourseId.Value > 0)
+                    {
+                        targetUserIds = await _db.Enrollments
+                            .Where(e => e.CourseId == exam.CourseId.Value && e.User != null && e.User.Status == "Active")
+                            .Select(e => e.UserId.Value)
+                            .ToListAsync();
+                    }
+                    else
+                    {
+                        int userDeptId = GetCurrentDeptId();
+                        bool isTrainingCenter = IsTrainingCenter();
+                        if (!isTrainingCenter && userDeptId > 0)
+                        {
+                            targetUserIds = await _db.Users
+                                .Where(u => u.DepartmentId == userDeptId && u.Status == "Active")
+                                .Select(u => u.UserId)
+                                .ToListAsync();
+                        }
+                        else
+                        {
+                            targetUserIds = await _db.Users
+                                .Where(u => u.Status == "Active")
+                                .Select(u => u.UserId)
+                                .ToListAsync();
+                        }
+                    }
+
+                    string notifTitle = $"Bạn có lịch thi mới: '{exam.ExamTitle}'" + 
+                                        (exam.StartDate.HasValue ? $" bắt đầu từ {exam.StartDate.Value.ToString("dd/MM/yyyy HH:mm")}" : "") +
+                                        (exam.EndDate.HasValue ? $" đến {exam.EndDate.Value.ToString("dd/MM/yyyy HH:mm")}." : ".");
+                    if (notifTitle.Length > 255) notifTitle = notifTitle.Substring(0, 252) + "...";
+
+                    foreach (var uid in targetUserIds)
+                    {
+                        _db.Notifications.Add(new Notification { UserId = uid, Title = notifTitle, IsRead = false });
+                    }
+                    await _db.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+                    return Ok(new { success = true, examId = exam.ExamId });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw; 
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi tạo bài thi: " + ex.Message });
+        }
+    }
 }
 
 // DTOs
@@ -1645,4 +2180,18 @@ public class HrPublishCourseDto
 public class ExtendAssignmentDto
 {
     public DateTime? NewDueDate { get; set; }
+}
+
+public class QuestionPoolItemDto
+{
+    public string QuestionText { get; set; } = "";
+    public string QuestionType { get; set; } = "MultipleChoice";
+    public string Difficulty { get; set; } = "Medium";
+    public List<QuestionPoolOptionDto>? Options { get; set; }
+}
+
+public class QuestionPoolOptionDto
+{
+    public string OptionText { get; set; } = "";
+    public bool IsCorrect { get; set; }
 }
