@@ -420,38 +420,38 @@
         </form>
 
         <div class="demo-login">
-            <div class="demo-title">Tai khoan demo de test giao dien</div>
+            <div class="demo-title">Đăng nhập nhanh bằng tài khoản CSDL mẫu</div>
             <div class="demo-grid">
                 <form method="post" asp-action="DemoLogin" asp-controller="Auth">
                     <input type="hidden" name="profile" value="it" />
                     <button type="submit" class="demo-card">
                         <div class="demo-card-role">⚙</div>
-                        <div class="demo-card-name">System / Admin</div>
-                        <div class="demo-card-meta">Vao dashboard quan tri he thong</div>
+                        <div class="demo-card-name">System Admin (IT)</div>
+                        <div class="demo-card-meta">TK: admin (Nguyễn Văn Trị)</div>
                     </button>
                 </form>
                 <form method="post" asp-action="DemoLogin" asp-controller="Auth">
                     <input type="hidden" name="profile" value="hr" />
                     <button type="submit" class="demo-card">
                         <div class="demo-card-role">👥</div>
-                        <div class="demo-card-name">Phong Nhan su</div>
-                        <div class="demo-card-meta">Vao giao dien manager phong HR</div>
+                        <div class="demo-card-name">Trưởng phòng HR</div>
+                        <div class="demo-card-meta">TK: tuyettthr0001 (Trần Thị Tuyết)</div>
                     </button>
                 </form>
                 <form method="post" asp-action="DemoLogin" asp-controller="Auth">
                     <input type="hidden" name="profile" value="manager" />
                     <button type="submit" class="demo-card">
-                        <div class="demo-card-role">📈</div>
-                        <div class="demo-card-name">Truong phong</div>
-                        <div class="demo-card-meta">Vao giao dien quan ly dao tao trong phong</div>
+                        <div class="demo-card-role">👨‍🏫</div>
+                        <div class="demo-card-name">Giảng viên Nội bộ</div>
+                        <div class="demo-card-meta">TK: maypvkt0001 (Phạm Văn Máy)</div>
                     </button>
                 </form>
                 <form method="post" asp-action="DemoLogin" asp-controller="Auth" style="grid-column: 1 / -1;">
                     <input type="hidden" name="profile" value="employee" />
                     <button type="submit" class="demo-card">
                         <div class="demo-card-role">🎓</div>
-                        <div class="demo-card-name">Nhan vien / Hoc vien</div>
-                        <div class="demo-card-meta">Vao giao dien hoc tap cua nhan vien</div>
+                        <div class="demo-card-name">Học viên (theo giảng viên)</div>
+                        <div class="demo-card-meta">TK: cuongnvcn0001 (Nguyễn Văn Cường)</div>
                     </button>
                 </form>
             </div>
@@ -489,7 +489,9 @@
                 const deptName = document.getElementById('dept-name');
 
                 if (data.success) {
-                    deptLogo.src = data.logoUrl || 'https://via.placeholder.com/150?text=Logo'; // Fallback nếu không có logo
+                    if (deptLogo) {
+                        deptLogo.src = data.logoUrl || 'https://via.placeholder.com/150?text=Logo';
+                    }
                     deptName.textContent = data.deptName;
                     logoContainer.style.display = 'block';
                     defaultHeader.style.display = 'none';

@@ -17,59 +17,72 @@ build_property._SupportedPlatformList = Linux,macOS,Windows
 build_property._SupportedPlatformList = Linux,macOS,Windows
 build_property.TargetFrameworkIdentifier = .NETCoreApp
 build_property.TargetFrameworkVersion = v10.0
+build_property.EntryPointFilePath = 
 build_property.RootNamespace = KhoaHoc
 build_property.RootNamespace = KhoaHoc
-build_property.ProjectDir = C:\lms\KhoaHoc\
+build_property.ProjectDir = D:\DATN\New folder\hethongdaotaonoibo\
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 
-build_property.RazorLangVersion = 9.0
+build_property.RazorLangVersion = 10.0
 build_property.SupportLocalizedComponentNames = 
 build_property.GenerateRazorMetadataSourceChecksumAttributes = 
-build_property.MSBuildProjectDirectory = C:\lms\KhoaHoc
+build_property.MSBuildProjectDirectory = D:\DATN\New folder\hethongdaotaonoibo
 build_property._RazorSourceGeneratorDebug = 
 build_property.EffectiveAnalysisLevelStyle = 10.0
 build_property.EnableCodeStyleSeverity = 
 
-[C:/lms/KhoaHoc/Views/Auth/Login.cshtml]
+[D:/DATN/New folder/hethongdaotaonoibo/Views/Auth/Login.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcQXV0aFxMb2dpbi5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/lms/KhoaHoc/Views/Home/Index.cshtml]
+[D:/DATN/New folder/hethongdaotaonoibo/Views/Home/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSG9tZVxJbmRleC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/lms/KhoaHoc/Views/Home/Privacy.cshtml]
+[D:/DATN/New folder/hethongdaotaonoibo/Views/Home/Privacy.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSG9tZVxQcml2YWN5LmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/lms/KhoaHoc/Views/HR/Index.cshtml]
+[D:/DATN/New folder/hethongdaotaonoibo/Views/HR/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSFJcSW5kZXguY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/lms/KhoaHoc/Views/IT/Index.cshtml]
+[D:/DATN/New folder/hethongdaotaonoibo/Views/IT/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcSVRcSW5kZXguY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/lms/KhoaHoc/Views/Shared/Error.cshtml]
+[D:/DATN/New folder/hethongdaotaonoibo/Views/Shared/Error.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU2hhcmVkXEVycm9yLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/lms/KhoaHoc/Views/Shared/_ValidationScriptsPartial.cshtml]
+[D:/DATN/New folder/hethongdaotaonoibo/Views/Shared/_ValidationScriptsPartial.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU2hhcmVkXF9WYWxpZGF0aW9uU2NyaXB0c1BhcnRpYWwuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/lms/KhoaHoc/Views/Student/Index.cshtml]
+[D:/DATN/New folder/hethongdaotaonoibo/Views/Student/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3R1ZGVudFxJbmRleC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/lms/KhoaHoc/Views/_ViewImports.cshtml]
+[D:/DATN/New folder/hethongdaotaonoibo/Views/Student/Learn.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3R1ZGVudFxMZWFybi5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/DATN/New folder/hethongdaotaonoibo/Views/Student/Quiz.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3R1ZGVudFxRdWl6LmNzaHRtbA==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/DATN/New folder/hethongdaotaonoibo/Views/Student/QuizResult.cshtml]
+build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU3R1ZGVudFxRdWl6UmVzdWx0LmNzaHRtbA==
+build_metadata.AdditionalFiles.CssScope = 
+
+[D:/DATN/New folder/hethongdaotaonoibo/Views/_ViewImports.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcX1ZpZXdJbXBvcnRzLmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/lms/KhoaHoc/Views/_ViewStart.cshtml]
+[D:/DATN/New folder/hethongdaotaonoibo/Views/_ViewStart.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcX1ZpZXdTdGFydC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
-[C:/lms/KhoaHoc/Views/Shared/_Layout.cshtml]
+[D:/DATN/New folder/hethongdaotaonoibo/Views/Shared/_Layout.cshtml]
 build_metadata.AdditionalFiles.TargetPath = Vmlld3NcU2hhcmVkXF9MYXlvdXQuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = b-4mqpx8h6ob
