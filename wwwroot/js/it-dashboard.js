@@ -162,6 +162,16 @@ function applyPermissionVisibility() {
 
 async function init() {
     console.log('IT Dashboard: Initializing...');
+    document.addEventListener('themechanged', () => {
+        const overviewEl = document.getElementById('overview');
+        if (overviewEl && overviewEl.style.display !== 'none') {
+            loadOverview();
+        }
+        const analyticsEl = document.getElementById('analytics');
+        if (analyticsEl && analyticsEl.style.display !== 'none') {
+            loadAnalytics();
+        }
+    });
     try {
         await Promise.all([
             refreshDepartmentsDropdown().catch(e => console.error('Error refreshing depts:', e)),
@@ -952,26 +962,91 @@ async function loadOverview() {
             const ctx = document.getElementById('userChart')?.getContext('2d');
             if (ctx) {
                 if (userChart) userChart.destroy();
+                const style = getComputedStyle(document.documentElement);
+                const primaryColor = style.getPropertyValue('--color-primary').trim() || '#0066cc';
+                const successColor = style.getPropertyValue('--color-success').trim() || '#11875d';
+                const infoColor = style.getPropertyValue('--color-info').trim() || '#2454cc';
+                const textColor = style.getPropertyValue('--color-text').trim() || '#1d1d1f';
                 userChart = new Chart(ctx, {
                     type: 'doughnut',
                     data: {
                         labels: Object.keys(stats.userRoleDist),
-                        datasets: [{ data: Object.values(stats.userRoleDist), backgroundColor: ['#3b82f6', '#10b981', '#6366f1'] }]
+                        datasets: [{ data: Object.values(stats.userRoleDist), backgroundColor: [primaryColor, successColor, infoColor], borderWidth: 0 }]
                     },
-                    options: { plugins: { legend: { position: 'right' } }, responsive: true, maintainAspectRatio: false }
+                    options: {
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: { color: textColor, font: { family: 'var(--font-text)', size: 12 } }
+                            }
+                        },
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '70%'
+                    }
                 });
             }
         }
 
         const auditData = await apiFetch('/api/it/auditlogs?pageSize=7').catch(e => ({ logs: [] }));
         if (logs) {
-            logs.innerHTML = (auditData.logs || []).map(l => `
-                <div class="log-item">
-                    <div style="font-weight:600">${l.userName}</div>
-                    <div style="font-size:12px;color:#64748b">${l.actionType} - ${fmtDateTime(l.createdAt)}</div>
-                    <div style="font-size:11px;color:#94a3b8">${l.description || ''}</div>
-                </div>
-            `).join('') || '<div style="padding:20px;text-align:center">Chưa có dữ liệu</div>';
+            if (auditData.logs && auditData.logs.length > 0) {
+                let html = `
+                    <div class="recent-activity-wrapper">
+                        <table class="recent-activity-table">
+                            <thead>
+                                <tr>
+                                    <th>Người thực hiện</th>
+                                    <th>Hành động</th>
+                                    <th>Thời gian</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                html += auditData.logs.map(l => {
+                    const actionLower = (l.actionType || '').toLowerCase();
+                    let badgeClass = 'info';
+                    let actionIcon = 'ℹ️';
+                    if (actionLower.includes('tạo') || actionLower.includes('thêm') || actionLower.includes('create') || actionLower.includes('insert')) {
+                        badgeClass = 'create';
+                        actionIcon = '➕';
+                    } else if (actionLower.includes('cập nhật') || actionLower.includes('sửa') || actionLower.includes('update') || actionLower.includes('edit')) {
+                        badgeClass = 'update';
+                        actionIcon = '✏️';
+                    } else if (actionLower.includes('xóa') || actionLower.includes('vô hiệu') || actionLower.includes('delete') || actionLower.includes('remove') || actionLower.includes('khóa')) {
+                        badgeClass = 'delete';
+                        actionIcon = '🗑️';
+                    } else if (actionLower.includes('đăng nhập') || actionLower.includes('login')) {
+                        badgeClass = 'login';
+                        actionIcon = '🔑';
+                    }
+                    
+                    return `
+                        <tr>
+                            <td>
+                                <div class="recent-activity-user">${l.userName}</div>
+                                <div class="recent-activity-desc" title="${l.description || ''}">${l.description || ''}</div>
+                            </td>
+                            <td>
+                                <span class="action-badge ${badgeClass}">${actionIcon} ${l.actionType}</span>
+                            </td>
+                            <td>
+                                <span class="recent-activity-time">🕒 ${fmtDateTime(l.createdAt)}</span>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+                
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                logs.innerHTML = html;
+            } else {
+                logs.innerHTML = '<div style="padding:40px;text-align:center;color:#7a7a7a;">Chưa có dữ liệu hoạt động gần đây</div>';
+            }
         }
     } catch(e) {
         console.error('Critical Overview Load Error:', e);
@@ -1040,7 +1115,7 @@ async function loadUsers(page = 1) {
         loadedUsersList = data.users || [];
         document.getElementById('usersTable').innerHTML = loadedUsersList.map(u => `
             <tr>
-                <td><input type="checkbox" class="user-check" value="${u.userId}" onchange="updateSelectedList()"></td>
+                <td><input type="checkbox" class="user-check" data-id="${u.userId}" ${selectedUserIds.has(u.userId) ? 'checked' : ''} onchange="toggleUserSelection(this, ${u.userId})"></td>
                 <td><strong>${u.fullName}</strong><div style="font-size:11px;color:#94a3b8">@${u.username}</div></td>
                 <td><code>${u.employeeCode || '—'}</code></td>
                 <td><span class="badge badge-info">${u.department || 'N/A'}</span></td>
@@ -1053,6 +1128,13 @@ async function loadUsers(page = 1) {
             </tr>
         `).join('');
         
+        // Cập nhật trạng thái của nút "Chọn tất cả"
+        const selectAllCb = document.getElementById('selectAllUsers');
+        const tableCbs = document.querySelectorAll('#usersTable input[type="checkbox"]');
+        if (selectAllCb) {
+            selectAllCb.checked = tableCbs.length > 0 && Array.from(tableCbs).every(c => c.checked);
+        }
+
         renderUsersPagination(data.total, page, 15);
         
         // Tự động cuộn lên đầu trang
@@ -2365,6 +2447,16 @@ let analyticsCharts = {};
 async function loadAnalytics() {
     try {
         const data = await apiFetch('/api/it/analytics');
+        const style = getComputedStyle(document.documentElement);
+        const primaryColor = style.getPropertyValue('--color-primary').trim() || '#0066cc';
+        const successColor = style.getPropertyValue('--color-success').trim() || '#11875d';
+        const warningColor = style.getPropertyValue('--color-warning').trim() || '#b96a00';
+        const dangerColor = style.getPropertyValue('--color-danger').trim() || '#c43c2f';
+        const infoColor = style.getPropertyValue('--color-info').trim() || '#2454cc';
+        const accentColor = style.getPropertyValue('--color-accent').trim() || '#2997ff';
+        const textColor = style.getPropertyValue('--color-text').trim() || '#1d1d1f';
+        const textMuted = style.getPropertyValue('--color-text-muted').trim() || '#7a7a7a';
+        const borderColor = style.getPropertyValue('--border-color').trim() || 'rgba(0,0,0,0.08)';
 
         if (data.userByDept && data.userByDept.length) {
             const ctx1 = document.getElementById('deptChart').getContext('2d');
@@ -2374,9 +2466,15 @@ async function loadAnalytics() {
                 data: {
                     labels: data.userByDept.map(d => d.department),
                     datasets: [{ label: 'Nhân viên', data: data.userByDept.map(d => d.userCount),
-                        backgroundColor: '#3b82f6', borderRadius: 6 }]
+                        backgroundColor: primaryColor, borderRadius: 8 }]
                 },
-                options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                options: {
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: borderColor }, ticks: { color: textMuted } },
+                        x: { grid: { display: false }, ticks: { color: textMuted } }
+                    }
+                }
             });
         }
 
@@ -2388,9 +2486,19 @@ async function loadAnalytics() {
                 data: {
                     labels: data.courseByCategory.map(c => c.category),
                     datasets: [{ data: data.courseByCategory.map(c => c.courseCount),
-                        backgroundColor: ['#3b82f6','#10b981','#f59e0b','#6366f1','#ef4444','#06b6d4'] }]
+                        backgroundColor: [primaryColor, successColor, warningColor, infoColor, dangerColor, accentColor], borderWidth: 0 }]
                 },
-                options: { plugins: { legend: { position: 'right' } } }
+                options: {
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: { color: textColor, font: { family: 'var(--font-text)', size: 11 } }
+                        }
+                    },
+                    cutout: '70%',
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
             });
         }
 
@@ -2402,9 +2510,15 @@ async function loadAnalytics() {
                 data: {
                     labels: data.enrollmentByMonth.map(e => `${e.month}/${e.year}`),
                     datasets: [{ label: 'Lượt đăng ký', data: data.enrollmentByMonth.map(e => e.count),
-                        borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, tension: 0.4 }]
+                        borderColor: primaryColor, backgroundColor: style.getPropertyValue('--color-primary-soft').trim() || 'rgba(0,102,204,0.1)', fill: true, tension: 0.4 }]
                 },
-                options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                options: {
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: borderColor }, ticks: { color: textMuted } },
+                        x: { grid: { display: false }, ticks: { color: textMuted } }
+                    }
+                }
             });
         }
 
@@ -2416,9 +2530,19 @@ async function loadAnalytics() {
                 type: 'doughnut',
                 data: {
                     labels: ['Đạt', 'Không đạt'],
-                    datasets: [{ data: [es.passed, es.failed], backgroundColor: ['#10b981', '#ef4444'] }]
+                    datasets: [{ data: [es.passed, es.failed], backgroundColor: [successColor, dangerColor], borderWidth: 0 }]
                 },
-                options: { plugins: { legend: { position: 'bottom' } } }
+                options: {
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: textColor, font: { family: 'var(--font-text)' } }
+                        }
+                    },
+                    cutout: '70%',
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
             });
             document.getElementById('examStatText').textContent = `Tỉ lệ pass: ${es.passRate}% (${es.passed}/${es.total} lượt thi)`;
         } else {
@@ -2740,13 +2864,13 @@ async function loadPermissionBoard() {
 
         document.getElementById('permissionsTable').innerHTML = Object.entries(groups).map(([groupName, items]) => `
             <div style="grid-column:1/-1">
-                <div style="font-size:13px;font-weight:800;color:#475569;margin:6px 0 12px;text-transform:uppercase;letter-spacing:.08em">${groupName}</div>
+                <div style="font-size:13px;font-weight:800;color:var(--color-text-secondary);margin:16px 0 12px;text-transform:uppercase;letter-spacing:.08em">${groupName}</div>
                 <div class="permission-grid">
                     ${items.map(p => `
-                        <button type="button" class="permission-tile ${p.enabled ? 'active' : ''}" onclick="togglePermissionTile(${p.permissionId}, ${p.enabled ? 'true' : 'false'}, '${p.source || 'none'}')">
-                            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+                        <button type="button" class="permission-tile ${p.enabled ? 'active' : ''}" style="--tile-accent: ${(permissionVisualMap[p.permissionKey]?.accent) || '#2563eb'}" onclick="togglePermissionTile(${p.permissionId}, ${p.enabled ? 'true' : 'false'}, '${p.source || 'none'}')">
+                            <div style="width:100%; display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
                                 <div style="display:flex;gap:12px;align-items:flex-start">
-                                    <div class="permission-mini-icon" style="--accent:${(permissionVisualMap[p.permissionKey]?.accent) || '#2563eb'}">${(permissionVisualMap[p.permissionKey]?.icon) || '✨'}</div>
+                                    <div class="permission-mini-icon">${(permissionVisualMap[p.permissionKey]?.icon) || '✨'}</div>
                                     <div class="permission-tile-key">${p.permissionKey}</div>
                                 </div>
                                 <span class="badge ${p.enabled ? 'badge-green' : 'badge-gray'}">${p.enabled ? 'Bật' : 'Tắt'}</span>
