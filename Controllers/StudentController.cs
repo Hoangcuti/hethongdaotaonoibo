@@ -14,12 +14,18 @@ public class StudentController : Controller
     private readonly CorporateLmsProContext _db;
     private readonly KhoaHoc.Services.IAIService _aiService;
     private readonly ILogger<StudentController> _logger;
+    private readonly KhoaHoc.BusinessLogicLayer.Services.IStudentService _studentService;
 
-    public StudentController(CorporateLmsProContext db, KhoaHoc.Services.IAIService aiService, ILogger<StudentController> logger)
+    public StudentController(
+        CorporateLmsProContext db, 
+        KhoaHoc.Services.IAIService aiService, 
+        ILogger<StudentController> logger,
+        KhoaHoc.BusinessLogicLayer.Services.IStudentService studentService)
     {
         _db = db;
         _aiService = aiService;
         _logger = logger;
+        _studentService = studentService;
     }
 
     private int? GetCurrentUserId()
@@ -72,45 +78,15 @@ public class StudentController : Controller
     public async Task<IActionResult> Dashboard()
     {
         try {
-            Console.WriteLine("DEBUG: Entering Dashboard API");
             var userId = GetCurrentUserId();
             if (userId == null) {
-                Console.WriteLine("DEBUG: UserId is null");
                 return Unauthorized();
             }
 
-            var enrollments = await _db.Enrollments
-                .Include(e => e.Course)
-                .Where(e => e.UserId == userId)
-                .ToListAsync();
-
-            var certificates = await _db.Certificates
-                .Where(c => c.UserId == userId)
-                .CountAsync();
-
-            Console.WriteLine($"DEBUG: Found {enrollments.Count} enrollments");
-
-            return Json(new
-            {
-                totalEnrolled = enrollments.Count,
-                inProgress = enrollments.Count(e => e.Status == "InProgress"),
-                completed = enrollments.Count(e => e.Status == "Completed"),
-                certificates = certificates,
-                totalPoints = 0, // Simplified for debug
-                badges = 0,
-                recentCourses = enrollments
-                    .OrderByDescending(e => e.EnrollDate)
-                    .Take(4)
-                    .Select(e => new
-                    {
-                        courseId = e.CourseId,
-                        title = e.Course?.Title ?? "N/A",
-                        progress = e.ProgressPercent ?? 0,
-                        status = e.Status
-                    })
-            });
+            var dashboardData = await _studentService.GetDashboardDataAsync(userId.Value);
+            return Json(dashboardData);
         } catch (Exception ex) {
-            Console.WriteLine($"DEBUG: Dashboard Error: {ex.Message}\n{ex.StackTrace}");
+            _logger.LogError(ex, "Dashboard Error");
             return StatusCode(500, new { error = "Lỗi Dashboard: " + ex.Message });
         }
     }
@@ -122,38 +98,7 @@ public class StudentController : Controller
         if (userId == null) return Unauthorized();
         var departmentId = GetCurrentDepartmentId();
 
-        var query = ApplyStudentCourseScope(_db.Courses
-            .Include(c => c.Category)
-            .Include(c => c.Enrollments.Where(e => e.UserId == userId))
-            .Include(c => c.Exams)
-            .Include(c => c.TrainingAssignments.Where(ta => ta.UserId == userId)), userId.Value, departmentId);
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            query = query.Where(c => c.Title != null && c.Title.Contains(search));
-        }
-
-        if (categoryId.HasValue)
-        {
-            query = query.Where(c => c.CategoryId == categoryId);
-        }
-
-        var courses = await query.Select(c => new
-        {
-            courseId = c.CourseId,
-            title = c.Title,
-            description = c.Description,
-            category = c.Category != null ? c.Category.CategoryName : "Chua phan loai",
-            isMandatory = c.IsMandatory,
-            thumbnail = c.Thumbnail,
-            status = c.Status,
-            enrolled = c.Enrollments.Any(e => e.UserId == userId),
-            progress = c.Enrollments.Where(e => e.UserId == userId)
-                .Select(e => e.ProgressPercent)
-                .FirstOrDefault() ?? 0,
-            quizCount = c.Exams.Count
-        }).ToListAsync();
-
+        var courses = await _studentService.GetCoursesForStudentAsync(userId.Value, departmentId, search, categoryId);
         return Json(courses);
     }
 
@@ -163,19 +108,7 @@ public class StudentController : Controller
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var certs = await _db.Certificates
-            .Include(c => c.Course)
-            .Where(c => c.UserId == userId)
-            .OrderByDescending(c => c.IssueDate)
-            .Select(c => new
-            {
-                certId = c.CertId,
-                certCode = c.CertCode,
-                courseName = c.Course != null ? c.Course.Title : "N/A",
-                issueDate = c.IssueDate
-            })
-            .ToListAsync();
-
+        var certs = await _studentService.GetCertificatesAsync(userId.Value);
         return Json(certs);
     }
 
@@ -185,42 +118,9 @@ public class StudentController : Controller
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var userPoint = await _db.UserPoints
-            .FirstOrDefaultAsync(up => up.UserId == userId);
-
-        var badges = await _db.UserBadges
-            .Include(ub => ub.Badge)
-            .Where(ub => ub.UserId == userId)
-            .OrderByDescending(ub => ub.EarnedDate)
-            .Select(ub => new
-            {
-                badgeName = ub.Badge.BadgeName,
-                description = ub.Badge.RequirementDescription,
-                iconUrl = ub.Badge.ImageUrl,
-                earnedDate = ub.EarnedDate
-            })
-            .ToListAsync();
-
-        var leaderboard = await _db.UserPoints
-            .Include(up => up.User)
-            .OrderByDescending(up => up.TotalPoints)
-            .Take(10)
-            .Select(up => new
-            {
-                userId = up.UserId,
-                fullName = up.User.FullName,
-                totalPoints = up.TotalPoints
-            })
-            .ToListAsync();
-
-        return Json(new
-        {
-            totalPoints = userPoint?.TotalPoints ?? 0,
-            badges,
-            leaderboard
-        });
+        var achievements = await _studentService.GetAchievementsAsync(userId.Value);
+        return Json(achievements);
     }
-
 
     [HttpGet("/api/student/courses/{id}")]
     public async Task<IActionResult> CourseDetails(int id)
@@ -229,32 +129,10 @@ public class StudentController : Controller
         if (userId == null) return Unauthorized();
         var departmentId = GetCurrentDepartmentId();
 
-        var course = await ApplyStudentCourseScope(_db.Courses
-            .Include(c => c.Category)
-            .Include(c => c.CourseModules)
-                .ThenInclude(m => m.Lessons)
-            .Include(c => c.Exams)
-            .Include(c => c.Enrollments.Where(e => e.UserId == userId))
-            .Include(c => c.TrainingAssignments.Where(ta => ta.UserId == userId)), userId.Value, departmentId)
-            .FirstOrDefaultAsync(c => c.CourseId == id);
+        var details = await _studentService.GetCourseDetailsAsync(id, userId.Value, departmentId);
+        if (details == null) return NotFound();
 
-        if (course == null) return NotFound();
-
-        var isEnrolled = await _db.Enrollments.AnyAsync(e => e.CourseId == id && e.UserId == userId);
-
-        return Json(new
-        {
-            courseId = course.CourseId,
-            title = course.Title,
-            description = course.Description,
-            category = course.Category?.CategoryName ?? "Chung",
-            isMandatory = course.IsMandatory,
-            thumbnail = course.Thumbnail,
-            enrolled = isEnrolled,
-            totalModules = course.CourseModules.Count,
-            totalLessons = course.CourseModules.SelectMany(m => m.Lessons).Count(),
-            totalQuizzes = course.Exams.Count
-        });
+        return Json(details);
     }
 
     [HttpPost("/api/student/enroll")]
@@ -264,25 +142,11 @@ public class StudentController : Controller
         if (userId == null) return Unauthorized();
         var departmentId = GetCurrentDepartmentId();
 
-        var existing = await _db.Enrollments.FirstOrDefaultAsync(e => e.UserId == userId && e.CourseId == courseId);
-        if (existing != null) return BadRequest(new { error = "Ban da dang ky khoa hoc nay roi." });
-
-        var course = await ApplyStudentCourseScope(_db.Courses
-            .Include(c => c.Enrollments.Where(e => e.UserId == userId))
-            .Include(c => c.TrainingAssignments.Where(ta => ta.UserId == userId)), userId.Value, departmentId)
-            .FirstOrDefaultAsync(c => c.CourseId == courseId);
-        if (course == null) return NotFound();
-
-        var enrollment = new Enrollment
+        var success = await _studentService.EnrollInCourseAsync(userId.Value, courseId, departmentId);
+        if (!success)
         {
-            UserId = userId.Value,
-            CourseId = courseId,
-            EnrollDate = DateTime.Now,
-            ProgressPercent = 0,
-            Status = "NotStarted"
-        };
-        _db.Enrollments.Add(enrollment);
-        await _db.SaveChangesAsync();
+            return BadRequest(new { error = "Đăng ký không thành công. Có thể khóa học không tồn tại hoặc bạn đã đăng ký rồi." });
+        }
 
         return Ok(new { success = true });
     }

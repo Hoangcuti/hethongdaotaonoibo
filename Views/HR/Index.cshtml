@@ -1,4 +1,4 @@
-@{
+﻿@{
     ViewData["Title"] = "Quản lý Phòng ban";
     Layout = "_Layout";
 }
@@ -7,48 +7,22 @@
     <meta name="description" content="Giao diện quản lý phòng ban - nhân viên, khóa học và đào tạo nội bộ" />
     <style>
         /* ===== ENTERPRISE MANAGER DASHBOARD STYLES ===== */
-        .mgr-kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-        .mgr-kpi { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; position: relative; overflow: hidden; transition: transform .2s, box-shadow .2s; }
-        .mgr-kpi:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.3); }
-        .mgr-kpi-accent { position: absolute; top: 0; left: 0; width: 4px; height: 100%; border-radius: 12px 0 0 12px; }
-        .mgr-kpi-icon { font-size: 28px; margin-bottom: 8px; }
-        .mgr-kpi-value { font-size: 28px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
-        .mgr-kpi-label { font-size: 14px; color: var(--text-secondary); font-weight: 500; text-transform: uppercase; letter-spacing: .5px; }
-        .mgr-kpi-change { font-size: 13px; margin-top: 6px; }
 
         /* Employee Cards Grid */
         .emp-search-bar { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
-        .emp-search-input { flex: 1; min-width: 200px; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; padding: 12px 16px; font-size: 16px; outline: none; transition: border-color .2s; }
-        .emp-search-input:focus { border-color: var(--primary); }
-        .emp-filter-btn { padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); font-size: 15px; cursor: pointer; transition: all .2s; }
-        .emp-filter-btn.active, .emp-filter-btn:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
-
         .emp-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-        .emp-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; cursor: pointer; transition: all .2s; position: relative; }
-        .emp-card:hover { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,130,246,.1); transform: translateY(-1px); }
         .emp-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
         .emp-avatar { width: 56px; height: 56px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; flex-shrink: 0; }
         .emp-card-name { font-weight: 600; font-size: 17px; line-height: 1.2; }
         .emp-card-sub { font-size: 14px; color: var(--text-secondary); margin-top: 2px; }
         .emp-card-badge { position: absolute; top: 14px; right: 14px; }
         .emp-progress-wrap { margin-bottom: 12px; }
-        .emp-progress-label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; }
-        .emp-progress-bar { height: 6px; background: var(--border-color); border-radius: 3px; overflow: hidden; }
-        .emp-progress-fill { height: 100%; border-radius: 3px; transition: width 1s ease; }
         .emp-card-actions { display: flex; gap: 8px; margin-top: 14px; }
         .emp-card-actions .btn { flex: 1; font-size: 12px; padding: 7px; justify-content: center; }
 
-        /* Status badges */
-        .badge-status-active { background: rgba(16,185,129,.15); color: #10b981; border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 600; }
-        .badge-status-inactive { background: rgba(148,163,184,.15); color: #94a3b8; border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 600; }
-
         /* Course cards */
-        .course-list-item { display: flex; align-items: center; gap: 14px; padding: 14px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 10px; transition: border-color .2s; }
-        .course-list-item:hover { border-color: var(--primary); }
-        .course-icon-box { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
         .course-list-info { flex: 1; }
         .course-list-title { font-weight: 600; font-size: 14px; }
-        .course-list-meta { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
 
         /* Assignment timeline */
         .assign-item { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--border-color); }
@@ -57,9 +31,6 @@
         .assign-info { flex: 1; }
         .assign-name { font-weight: 600; font-size: 13px; }
         .assign-course { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
-        .priority-high { background: rgba(239,68,68,.15); color: #ef4444; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; }
-        .priority-normal { background: rgba(59,130,246,.15); color: #3b82f6; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; }
-        .priority-low { background: rgba(16,185,129,.15); color: #10b981; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; }
 
         /* Profile Panel */
         #profileOverlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(3px); z-index: 300; display: none; }
@@ -96,23 +67,6 @@
         <div class="page-title" id="pageTitle">Tổng quan bộ phận</div>
         <div class="page-subtitle" id="pageSubtitle">Dashboard quản lý nhân sự và đào tạo</div>
     </div>
-    <div class="header-actions">
-        @if (Context.Session.GetString("DepartmentName") == "Trung tâm Đào tạo Nội bộ")
-        {
-            <button class="btn btn-secondary" id="btnBroadcast" onclick="navigate('courses'); openAssignDeptModal();">
-                📢 Phân khóa học cho phòng ban
-            </button>
-        }
-        else
-        {
-            <button class="btn btn-secondary" id="btnBroadcast" onclick="navigate('courses'); openAssignDeptModal();">
-                📢 Giao toàn phòng
-            </button>
-        }
-        <button class="btn btn-primary" onclick="openCreateEmployeeModal()">
-            ➕ Thêm nhân sự
-        </button>
-    </div>
 </div>
 
 <div class="content-area">
@@ -121,10 +75,26 @@
     <div id="hr-overview" class="page-section fade-in">
         <!-- KPI Cards -->
         <div class="mgr-kpi-grid" id="kpiGrid">
-            <div class="mgr-kpi"><div class="mgr-kpi-accent" style="background:#3b82f6"></div><div class="mgr-kpi-icon">👥</div><div class="mgr-kpi-value" id="kpiEmp">—</div><div class="mgr-kpi-label">Nhân sự hiện có</div></div>
-            <div class="mgr-kpi"><div class="mgr-kpi-accent" style="background:#10b981"></div><div class="mgr-kpi-icon">✅</div><div class="mgr-kpi-value" id="kpiCompleted">—</div><div class="mgr-kpi-label">Khóa đã hoàn thành</div></div>
-            <div class="mgr-kpi"><div class="mgr-kpi-accent" style="background:#f59e0b"></div><div class="mgr-kpi-icon">📋</div><div class="mgr-kpi-value" id="kpiAssigned">—</div><div class="mgr-kpi-label">Nhiệm vụ đang giao</div></div>
-            <div class="mgr-kpi"><div class="mgr-kpi-accent" style="background:#8b5cf6"></div><div class="mgr-kpi-icon">🏅</div><div class="mgr-kpi-value" id="kpiCerts">—</div><div class="mgr-kpi-label">Chứng chỉ đạt được</div></div>
+            <div class="mgr-kpi blue">
+                <div class="mgr-kpi-icon">👥</div>
+                <div class="mgr-kpi-value" id="kpiEmp">—</div>
+                <div class="mgr-kpi-label">Nhân sự hiện có</div>
+            </div>
+            <div class="mgr-kpi success">
+                <div class="mgr-kpi-icon">✅</div>
+                <div class="mgr-kpi-value" id="kpiCompleted">—</div>
+                <div class="mgr-kpi-label">Khóa đã hoàn thành</div>
+            </div>
+            <div class="mgr-kpi warning">
+                <div class="mgr-kpi-icon">📋</div>
+                <div class="mgr-kpi-value" id="kpiAssigned">—</div>
+                <div class="mgr-kpi-label">Nhiệm vụ đang giao</div>
+            </div>
+            <div class="mgr-kpi info">
+                <div class="mgr-kpi-icon">🏅</div>
+                <div class="mgr-kpi-value" id="kpiCerts">—</div>
+                <div class="mgr-kpi-label">Chứng chỉ đạt được</div>
+            </div>
         </div>
 
         <!-- Charts -->
@@ -582,6 +552,13 @@ async function loadDepartments() {
 }
 
 async function init() {
+    document.addEventListener('themechanged', () => {
+        const overviewEl = document.getElementById('hr-overview');
+        if (overviewEl && overviewEl.style.display !== 'none') {
+            loadOverview();
+        }
+    });
+
     if (userRole === 'Trainer' || userRole === 'Lecturer') {
         await loadCourses();
         navigate('courses');
@@ -604,12 +581,30 @@ async function loadOverview() {
 }
 
 function renderCharts(s) {
+    const style = getComputedStyle(document.documentElement);
+    const successColor = style.getPropertyValue('--color-success').trim() || '#10b981';
+    const primaryColor = style.getPropertyValue('--color-primary').trim() || '#3b82f6';
+    const textSecondary = style.getPropertyValue('--color-text-secondary').trim() || '#94a3b8';
+    const textColor = style.getPropertyValue('--color-text').trim() || '#1d1d1f';
+    const surfaceSubtle = style.getPropertyValue('--color-surface-subtle').trim() || '#f0f0f3';
+    const infoColor = style.getPropertyValue('--color-info').trim() || '#2454cc';
+
     const pCtx = document.getElementById('progressChart').getContext('2d');
     if(charts.p) charts.p.destroy();
     charts.p = new Chart(pCtx, {
         type:'doughnut',
-        data:{ labels:['Hoàn thành','Đang học','Chưa bắt đầu'], datasets:[{ data:[s.completedTrainings||0, Math.max(1,s.totalAssignments-s.completedTrainings), 2], backgroundColor:['#10b981','#3b82f6','#64748b'], borderWidth:0 }] },
-        options:{ plugins:{ legend:{ position:'right', labels:{ color:'#94a3b8', font:{size:12} } } }, cutout:'65%' }
+        data:{ labels:['Hoàn thành','Đang học','Chưa bắt đầu'], datasets:[{ data:[s.completedTrainings||0, Math.max(0,(s.totalAssignments||0)-(s.completedTrainings||0)), 2], backgroundColor:[successColor,primaryColor,textSecondary], borderWidth:0 }] },
+        options:{ 
+            plugins:{ 
+                legend:{ 
+                    position:'right', 
+                    labels:{ color:textColor, font:{ family: 'var(--font-text)', size:12 } } 
+                } 
+            }, 
+            cutout:'70%',
+            responsive: true,
+            maintainAspectRatio: false
+        }
     });
 
     const bCtx = document.getElementById('budgetChart').getContext('2d');
@@ -617,13 +612,13 @@ function renderCharts(s) {
     const spent = s.spentBudget || 0, total = s.totalBudget || 1;
     charts.b = new Chart(bCtx, {
         type:'doughnut',
-        data:{ labels:['Đã chi','Còn lại'], datasets:[{ data:[spent, Math.max(0,total-spent)], backgroundColor:['#6366f1','#1e293b'], borderWidth:0 }] },
+        data:{ labels:['Đã chi','Còn lại'], datasets:[{ data:[spent, Math.max(0,total-spent)], backgroundColor:[infoColor,surfaceSubtle], borderWidth:0 }] },
         options:{ maintainAspectRatio:true, responsive:true, plugins:{ legend:{ display:false } }, cutout:'72%' }
     });
     document.getElementById('budgetLegend').innerHTML = `
-        <div style="margin-bottom:8px;"><div style="font-size:11px;color:#94a3b8;">Đã chi</div><div style="font-weight:700;color:#6366f1">${fmtMoney(spent)}</div></div>
-        <div><div style="font-size:11px;color:#94a3b8;">Tổng NS</div><div style="font-weight:700;">${fmtMoney(total)}</div></div>
-        <div style="margin-top:8px;"><div style="font-size:11px;color:#94a3b8;">Đã dùng</div><div style="font-weight:700;color:${s.budgetUsagePercent>80?'#ef4444':'#10b981'}">${s.budgetUsagePercent}%</div></div>`;
+        <div style="margin-bottom:8px;"><div style="font-size:11px;color:var(--color-text-secondary);">Đã chi</div><div style="font-weight:700;color:var(--color-info)">${fmtMoney(spent)}</div></div>
+        <div><div style="font-size:11px;color:var(--color-text-secondary);">Tổng NS</div><div style="font-weight:700;color:var(--color-text);">${fmtMoney(total)}</div></div>
+        <div style="margin-top:8px;"><div style="font-size:11px;color:var(--color-text-secondary);">Đã dùng</div><div style="font-weight:700;color:${s.budgetUsagePercent>80?'var(--color-danger)':'var(--color-success)'}">${s.budgetUsagePercent}%</div></div>`;
 }
 function fmtMoney(v) { if(v>=1e9) return (v/1e9).toFixed(1)+'B'; if(v>=1e6) return (v/1e6).toFixed(1)+'M'; return v.toLocaleString(); }
 

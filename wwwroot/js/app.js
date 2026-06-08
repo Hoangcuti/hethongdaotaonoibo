@@ -230,6 +230,7 @@ function toggleTheme() {
     htmlEl.setAttribute('data-theme', nextTheme);
     localStorage.setItem('lms_theme', nextTheme);
     updateThemeButton(nextTheme);
+    document.dispatchEvent(new CustomEvent('themechanged', { detail: { theme: nextTheme } }));
 }
 
 function setSidebarOpen(isOpen) {

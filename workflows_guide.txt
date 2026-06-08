@@ -1,0 +1,56 @@
+HƯỚNG DẪN CHI TIẾT: KIẾN TRÚC & LUỒNG NGHIỆP VỤ DỰ ÁN
+
+Tài liệu này mô tả chi tiết dòng chảy kỹ thuật và các luồng nghiệp vụ cốt lõi của ứng dụng đào tạo nội bộ sau khi tái cấu trúc theo mô hình 3 lớp.
+
+=========================================
+1. DÒNG CHẢY KỸ THUẬT 3 LỚP (TECHNICAL FLOW)
+=========================================
+
+Mỗi khi người dùng tương tác trên giao diện, dữ liệu sẽ đi qua các tầng theo thứ tự sau:
+
+1. Presentation Layer (PL - Tầng hiển thị):
+   * Nhận HTTP Request từ Client (ví dụ: AJAX gọi tới các API hoặc tải trang Razor View).
+   * Thực hiện bởi các Controllers (như AuthController, StudentController, ITUserController).
+   * Nhiệm vụ: Chỉ giải quyết định tuyến, đọc Session/Cookie, trả về View hoặc dữ liệu JSON. Không chứa logic nghiệp vụ.
+
+2. Business Logic Layer (BLL - Tầng nghiệp vụ):
+   * Nhận tham số đầu vào từ Controller, thực hiện xử lý nghiệp vụ, kiểm tra tính hợp lệ, tính toán tiến trình hoặc gọi dịch vụ AI.
+   * Thực hiện bởi các Services (như UserService, StudentService).
+   * Nhiệm vụ: Chứa toàn bộ logic của ứng dụng, các luật lệ (ví dụ: khóa bài học, điều kiện đỗ thi).
+
+3. Data Access Layer (DAL - Tầng truy xuất dữ liệu):
+   * Tương tác trực tiếp với cơ sở dữ liệu SQL Server thông qua Entity Framework Core.
+   * Thực hiện bởi Generic Repository (Repository.cs) và các Custom Repository chuyên biệt (UserRepository.cs, CourseRepository.cs).
+   * Nhiệm vụ: Chạy các câu lệnh SQL SELECT, INSERT, UPDATE, DELETE và trả dữ liệu thô (Entity) cho tầng BLL.
+
+=========================================
+2. CÁC LUỒNG NGHIỆP VỤ CỐT LÕI (CORE BUSINESS FLOWS)
+=========================================
+
+Luồng 1: Xác thực & Phân quyền (Authentication & Authorization)
+-----------------------------------------
+* Bước 1: Người dùng nhập thông tin đăng nhập tại /Auth/Login.
+* Bước 2: AuthController nhận thông tin và chuyển tiếp qua IUserService.AuthenticateAsync(username, password).
+* Bước 3: UserService thực hiện truy vấn thông tin User bằng UserRepository. Sau đó tiến hành băm SHA256 mật khẩu nhập vào để so sánh với PasswordHash trong DB.
+* Bước 4: Nếu khớp, cập nhật thời gian đăng nhập LastLogin và lưu thông tin định danh vào Session + Cookie Claims trên trình duyệt.
+* Bước 5: Điều hướng người dùng về trang chủ quản trị dựa trên vai trò:
+  - Vai trò IT: Chuyển tới /IT để cấu hình, kiểm tra logs, seeding dữ liệu.
+  - Vai trò Manager: Chuyển tới /HR để quản lý nhân sự, quản lý khóa học.
+  - Vai trò Student: Chuyển tới /Student để học tập.
+
+Luồng 2: Quy trình sinh khóa học tự động bằng AI (AI Gemini integration)
+-----------------------------------------
+* Bước 1: Trưởng phòng (HR) nhập một chủ đề bài giảng (ví dụ: "Kỹ năng làm việc nhóm") trên giao diện HR.
+* Bước 2: HRController nhận yêu cầu và gọi tới GeminiAIService.
+* Bước 3: GeminiAIService gửi một request HTTP POST chứa Prompt mẫu chuẩn cấu trúc giáo trình đến Google Gemini API (model gemini-1.5-flash).
+* Bước 4: AI trả về dữ liệu định dạng JSON chứa: Tiêu đề khóa học, mô tả khóa học, danh sách các Chương (Modules) và các Bài học (Lessons).
+* Bước 5: Lớp Service bóc tách chuỗi JSON, kiểm tra lỗi cú pháp, sau đó thực hiện lưu tự động các bản ghi mới vào các bảng tương ứng (Courses, CourseModules, Lessons) trong Database.
+
+Luồng 3: Quy trình Học tập, Ràng buộc bài thi & Chứng chỉ
+-----------------------------------------
+* Bước 1: Học viên đăng nhập vào hệ thống, xem các khóa học được chỉ định học bắt buộc (IsMandatory) hoặc tự đăng ký (Enroll).
+* Bước 2: Khi học viên truy cập giáo trình một khóa học (qua API /api/student/curriculum/{courseId}):
+  - StudentService sẽ quét toàn bộ danh sách chương học.
+  - Nếu Chương 2 yêu cầu phải thi đỗ Chương 1, Service sẽ kiểm tra điểm thi cao nhất của học viên ở bài thi Chương 1. Nếu điểm chưa đạt hoặc chưa làm bài thi, toàn bộ bài học và bài thi của Chương 2 sẽ bị khóa (isLocked = true) kèm lý do khóa hiển thị trên giao diện.
+* Bước 3: Khi học viên học trực tuyến (đọc tài liệu hoặc xem video) và nhấn nút "Hoàn thành bài học", hệ thống gọi API CompleteLesson. Dịch vụ BLL cập nhật tiến trình vào bảng UserLessonLogs, đồng thời tính toán lại tỉ lệ hoàn thành % của toàn bộ khóa học.
+* Bước 4: Khi học viên hoàn thành 100% tiến độ khóa học và đỗ toàn bộ các bài thi trắc nghiệm (Quiz) với điểm số đạt chuẩn, hệ thống tự động sinh một bản ghi Certificate mới và cấp mã chứng chỉ duy nhất để học viên có thể xem hoặc tải xuống bất cứ lúc nào.

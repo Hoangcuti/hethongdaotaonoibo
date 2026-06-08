@@ -25,6 +25,17 @@ builder.Services.AddDbContext<CorporateLmsProContext>(options =>
 
 builder.Services.AddScoped<KhoaHoc.Services.IEmailService, KhoaHoc.Services.EmailService>();
 builder.Services.AddHttpClient<KhoaHoc.Services.IAIService, KhoaHoc.Services.GeminiAIService>();
+
+// Register 3-Layer DAL Repositories
+builder.Services.AddScoped(typeof(KhoaHoc.DataAccessLayer.Repositories.IRepository<>), typeof(KhoaHoc.DataAccessLayer.Repositories.Repository<>));
+builder.Services.AddScoped<KhoaHoc.DataAccessLayer.Repositories.IUserRepository, KhoaHoc.DataAccessLayer.Repositories.UserRepository>();
+builder.Services.AddScoped<KhoaHoc.DataAccessLayer.Repositories.ICourseRepository, KhoaHoc.DataAccessLayer.Repositories.CourseRepository>();
+
+// Register 3-Layer BLL Services
+builder.Services.AddScoped<KhoaHoc.BusinessLogicLayer.Services.IUserService, KhoaHoc.BusinessLogicLayer.Services.UserService>();
+builder.Services.AddScoped<KhoaHoc.BusinessLogicLayer.Services.ICourseService, KhoaHoc.BusinessLogicLayer.Services.CourseService>();
+builder.Services.AddScoped<KhoaHoc.BusinessLogicLayer.Services.IStudentService, KhoaHoc.BusinessLogicLayer.Services.StudentService>();
+
 builder.Services.AddControllersWithViews();
 builder.Services.Configure<FormOptions>(options =>
 {

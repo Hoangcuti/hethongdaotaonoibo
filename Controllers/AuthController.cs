@@ -11,11 +11,11 @@ namespace KhoaHoc.Controllers;
 
 public class AuthController : Controller
 {
-    private readonly CorporateLmsProContext _db;
+    private readonly KhoaHoc.BusinessLogicLayer.Services.IUserService _userService;
 
-    public AuthController(CorporateLmsProContext db)
+    public AuthController(KhoaHoc.BusinessLogicLayer.Services.IUserService userService)
     {
-        _db = db;
+        _userService = userService;
     }
 
     [HttpGet]
@@ -42,50 +42,12 @@ public class AuthController : Controller
         username = username.Trim();
         password = password.Trim();
 
-        // 2. Tìm User trong DB (bao gồm cả Roles và Department để check quyền sau này)
-        var searchUsername = username;
-        if (searchUsername.Contains("@"))
-        {
-            searchUsername = searchUsername.Split('@')[0];
-        }
-
-        var user = await _db.Users
-            .Include(u => u.Roles)
-            .Include(u => u.Department)
-            .FirstOrDefaultAsync(u => (u.Username == searchUsername || u.Email == username) && u.Status == "Active");
+        // 2. Xác thực qua Tầng Nghiệp vụ (BLL)
+        var user = await _userService.AuthenticateAsync(username, password);
 
         if (user == null)
         {
-            ViewBag.Error = "Tên đăng nhập không tồn tại hoặc tài khoản đã bị khóa.";
-            return View();
-        }
-
-        // 3. KIỂM TRA MẬT KHẨU (PHẦN QUAN TRỌNG NHẤT)
-        bool passwordValid = false;
-        if (user.PasswordHash != null)
-        {
-            // Băm mật khẩu người dùng vừa nhập bằng SHA256
-            byte[] inputBytes = Encoding.UTF8.GetBytes(password);
-            byte[] hashedInput = SHA256.HashData(inputBytes);
-
-            // Chuyển cả 2 sang chuỗi Hex (viết hoa) để so sánh cho chính xác tuyệt đối
-            string storedHashHex = Convert.ToHexString(user.PasswordHash);
-            string inputHashHex = Convert.ToHexString(hashedInput);
-
-            if (storedHashHex.Equals(inputHashHex, StringComparison.OrdinalIgnoreCase))
-            {
-                passwordValid = true;
-            }
-            // Fallback: nếu Database lưu password dưới dạng plain text (ví dụ bị ai đó insert nhầm text vào VARBINARY)
-            else if (Encoding.UTF8.GetString(user.PasswordHash) == password)
-            {
-                passwordValid = true;
-            }
-        }
-
-        if (!passwordValid)
-        {
-            ViewBag.Error = "Mật khẩu không chính xác.";
+            ViewBag.Error = "Tên đăng nhập không tồn tại, mật khẩu không chính xác hoặc tài khoản đã bị khóa.";
             return View();
         }
 
@@ -124,10 +86,6 @@ public class AuthController : Controller
             new ClaimsPrincipal(claimsIdentity), 
             authProperties);
 
-        // 6. CẬP NHẬT THỜI GIAN ĐĂNG NHẬP CUỐI
-        user.LastLogin = DateTime.Now;
-        await _db.SaveChangesAsync();
-
         return RedirectToDashboard();
     }
 
@@ -136,37 +94,50 @@ public class AuthController : Controller
     {
         var normalized = (profile ?? string.Empty).Trim().ToLowerInvariant();
 
-        var demoProfiles = new Dictionary<string, (string Username, string FullName, string Role, string DepartmentName, string DepartmentId, string Dashboard)>
+        string? targetUsername = normalized switch
         {
-            ["it"] = ("demo.it", "System Admin Demo", "IT", "Van hanh he thong", "0", "IT"),
-            ["hr"] = ("demo.hr", "HR Demo", "Manager", "Nhan su", "101", "HR"),
-            ["manager"] = ("demo.manager", "Truong phong Demo", "Manager", "Phong ban demo", "102", "HR"),
-            ["employee"] = ("demo.employee", "Nhan vien Demo", "Student", "Khoi nghiep vu", "104", "Student")
+            "it" => "admin",
+            "hr" => "tuyettthr0001",
+            "manager" => "maypvkt0001",
+            "employee" => "cuongnvcn0001",
+            _ => null
         };
 
-        if (!demoProfiles.TryGetValue(normalized, out var demo))
+        if (targetUsername == null)
         {
-            ViewBag.Error = "Khong tim thay tai khoan demo.";
+            ViewBag.Error = "Không tìm thấy cấu hình tài khoản demo.";
             return View("Login");
         }
 
-        HttpContext.Session.SetString("UserID", $"demo-{normalized}");
-        HttpContext.Session.SetString("FullName", demo.FullName);
-        HttpContext.Session.SetString("Username", demo.Username);
-        HttpContext.Session.SetString("DepartmentID", demo.DepartmentId);
-        HttpContext.Session.SetString("DepartmentName", demo.DepartmentName);
-        HttpContext.Session.SetString("IsDeptAdmin", (demo.Role == "Manager").ToString());
-        HttpContext.Session.SetString("Role", demo.Role);
+        var user = await _userService.GetActiveUserByUsernameAsync(targetUsername);
 
+        if (user == null)
+        {
+            ViewBag.Error = $"Không tìm thấy tài khoản '{targetUsername}' trong CSDL. Vui lòng chạy Seeder.";
+            return View("Login");
+        }
+
+        // Thiết lập Session giống hệt Login thật
+        HttpContext.Session.SetString("UserID", user.UserId.ToString());
+        HttpContext.Session.SetString("FullName", user.FullName ?? user.Username ?? "Người dùng");
+        HttpContext.Session.SetString("Username", user.Username ?? "");
+        HttpContext.Session.SetString("DepartmentID", user.DepartmentId?.ToString() ?? "0");
+        HttpContext.Session.SetString("DepartmentName", user.Department?.DepartmentName ?? "");
+        HttpContext.Session.SetString("IsDeptAdmin", (user.IsDeptAdmin == true).ToString());
+        
+        string role = DetermineRole(user);
+        HttpContext.Session.SetString("Role", role);
+
+        // Thiết lập Cookie cho [Authorize]
         var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.NameIdentifier, $"demo-{normalized}"),
-            new Claim(ClaimTypes.Name, demo.Username),
-            new Claim("FullName", demo.FullName),
-            new Claim("DepartmentName", demo.DepartmentName),
-            new Claim("DepartmentID", demo.DepartmentId),
-            new Claim("IsDeptAdmin", (demo.Role == "Manager").ToString()),
-            new Claim(ClaimTypes.Role, demo.Role)
+            new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
+            new Claim(ClaimTypes.Name, user.Username ?? ""),
+            new Claim("FullName", user.FullName ?? ""),
+            new Claim(ClaimTypes.Role, role),
+            new Claim("DepartmentID", user.DepartmentId?.ToString() ?? "0"),
+            new Claim("DepartmentName", user.Department?.DepartmentName ?? ""),
+            new Claim("IsDeptAdmin", (user.IsDeptAdmin == true).ToString())
         };
 
         var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -181,12 +152,7 @@ public class AuthController : Controller
             new ClaimsPrincipal(claimsIdentity),
             authProperties);
 
-        return demo.Dashboard switch
-        {
-            "IT" => RedirectToAction("Index", "IT"),
-            "HR" => RedirectToAction("Index", "HR"),
-            _ => RedirectToAction("Index", "Student")
-        };
+        return RedirectToDashboard();
     }
 
     public async Task<IActionResult> Logout()
@@ -229,9 +195,7 @@ public class AuthController : Controller
         if (string.IsNullOrWhiteSpace(username))
             return Json(new { success = false });
 
-        var user = await _db.Users
-            .Include(u => u.Department)
-            .FirstOrDefaultAsync(u => u.Username == username && u.Status == "Active");
+        var user = await _userService.GetActiveUserByUsernameAsync(username);
 
         if (user == null || user.Department == null)
             return Json(new { success = false });
