@@ -1,4 +1,4 @@
-@{
+﻿@{
     ViewData["Title"] = "Dashboard IT Admin";
     Layout = "_Layout";
 }
@@ -25,14 +25,6 @@
     <div>
         <div class="page-title" id="pageTitle">Tổng quan hệ thống</div>
         <div class="page-subtitle" id="pageSubtitle">Giám sát và quản lý hạ tầng LMS</div>
-    </div>
-    <div class="header-actions">
-        <button class="btn btn-secondary" data-permission="users.manage" onclick="openBulkDeptModal()">
-            🚀 Đẩy NV vào phòng ban
-        </button>
-        <button class="btn btn-primary" data-permission="users.manage" onclick="navigate('users'); openModal('createUserModal');">
-            👤 Tạo tài khoản
-        </button>
     </div>
 </div>
 
@@ -70,6 +62,12 @@
                         <span class="input-icon">🔍</span>
                         <input id="userSearch" type="text" class="form-input with-icon" placeholder="Tìm tên, email, mã NV..." oninput="debouncedLoadUsers()">
                     </div>
+                    <button class="btn btn-secondary" data-permission="users.manage" onclick="openBulkDeptModal()">
+                        🚀 Đẩy NV vào phòng ban
+                    </button>
+                    <button class="btn btn-primary" data-permission="users.manage" onclick="openModal('createUserModal');">
+                        👤 Tạo tài khoản
+                    </button>
                 </div>
             </div>
         </div>

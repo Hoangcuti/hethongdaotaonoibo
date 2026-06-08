@@ -1,4 +1,4 @@
-@{
+﻿@{
     Layout = null;
     int courseId = ViewBag.CourseId;
     string courseTitle = ViewBag.CourseTitle ?? "Khóa học";
@@ -42,6 +42,7 @@
                 radial-gradient(circle at 100% 100%, rgba(41, 151, 255, 0.08) 0%, transparent 34%),
                 var(--bg);
             color: var(--ink);
+            overflow: hidden;
         }
         
         .layout { display: block; min-height: 100vh; }
@@ -211,7 +212,17 @@
         @@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
         /* Main Content */
-        .main { margin-left: 340px; padding: 32px; display: flex; flex-direction: column; gap: 32px; position: relative; scroll-behavior: smooth; }
+        .main {
+            margin-left: 340px;
+            height: 100vh;
+            overflow-y: auto;
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+            position: relative;
+            scroll-behavior: smooth;
+        }
 
         .glass-card {
             background: var(--card-bg);
