@@ -500,7 +500,7 @@ public partial class ITController : Controller
         var existing = await _db.UserPermissions.FirstOrDefaultAsync(up => up.UserId == userId && up.PermissionId == permissionId);
         var inherited = user.Roles.SelectMany(r => r.Permissions).Any(p => p.PermissionId == permissionId);
         if (inherited)
-            return BadRequest(new { error = "Quy?n n?y dang du?c k? th?a t? role. H?y ch?nh ? ph?n quy?n role n?u mu?n t?t." });
+            return BadRequest(new { error = "Quyền này đang được kế thừa từ role. Hãy chỉnh ở phần quyền role nếu muốn tắt." });
 
         var enabled = existing == null;
 

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using KhoaHoc.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 
 using Microsoft.Extensions.Logging;
@@ -15,17 +16,20 @@ public class StudentController : Controller
     private readonly KhoaHoc.Services.IAIService _aiService;
     private readonly ILogger<StudentController> _logger;
     private readonly KhoaHoc.BusinessLogicLayer.Services.IStudentService _studentService;
+    private readonly IWebHostEnvironment _env;
 
     public StudentController(
         CorporateLmsProContext db, 
         KhoaHoc.Services.IAIService aiService, 
         ILogger<StudentController> logger,
-        KhoaHoc.BusinessLogicLayer.Services.IStudentService studentService)
+        KhoaHoc.BusinessLogicLayer.Services.IStudentService studentService,
+        IWebHostEnvironment env)
     {
         _db = db;
         _aiService = aiService;
         _logger = logger;
         _studentService = studentService;
+        _env = env;
     }
 
     private int? GetCurrentUserId()
@@ -44,7 +48,7 @@ public class StudentController : Controller
     {
         return query.Where(c =>
             c.Status != null &&
-            VisibleCourseStatuses.Contains(c.Status) &&
+            (c.Status == "Published" || c.Status == "Active") &&
             (
                 c.Enrollments.Any(e => e.UserId == userId) ||
                 c.TrainingAssignments.Any(ta => ta.UserId == userId) ||
@@ -684,7 +688,7 @@ public class StudentController : Controller
         if (userExam.IsFinish == true) return BadRequest(new { error = "Bai kiem tra nay da duoc nop." });
 
         var normalizedAnswers = NormalizeAnswers(dto.Answers);
-        await SyncUserAnswersAsync(userExam.UserExamId, normalizedAnswers);
+        await SyncUserAnswersAsync(userExam.UserExamId, normalizedAnswers, dto.TextAnswers);
 
         var session = await _db.QuizSessionStates.FirstOrDefaultAsync(s => s.UserExamId == userExam.UserExamId);
         if (session == null)
@@ -695,8 +699,8 @@ public class StudentController : Controller
 
         session.CurrentQuestionIndex = Math.Max(dto.CurrentQuestionIndex, 0);
         session.RemainingSeconds = Math.Max(dto.RemainingSeconds, 0);
-        session.AnsweredCount = normalizedAnswers.Count;
-        session.SavedAnswersJson = JsonSerializer.Serialize(normalizedAnswers);
+        session.AnsweredCount = normalizedAnswers.Count + (dto.TextAnswers?.Count ?? 0);
+        session.SavedAnswersJson = JsonSerializer.Serialize(new { OptionAnswers = normalizedAnswers, TextAnswers = dto.TextAnswers });
         session.LastActivityAt = DateTime.Now;
         session.LastSavedAt = DateTime.Now;
 
@@ -725,7 +729,7 @@ public class StudentController : Controller
         if (userExam?.Exam == null) return NotFound();
 
         var normalizedAnswers = NormalizeAnswers(dto.Answers);
-        await SyncUserAnswersAsync(userExam.UserExamId, normalizedAnswers);
+        await SyncUserAnswersAsync(userExam.UserExamId, normalizedAnswers, dto.TextAnswers);
 
         var userAnswers = await _db.UserAnswers.Where(a => a.UserExamId == userExam.UserExamId).ToListAsync();
         var userAnswerMap = userAnswers.ToDictionary(a => a.QuestionId, a => a);
@@ -764,8 +768,8 @@ public class StudentController : Controller
 
         state.CurrentQuestionIndex = Math.Max(dto.CurrentQuestionIndex, 0);
         state.RemainingSeconds = Math.Max(dto.RemainingSeconds, 0);
-        state.AnsweredCount = normalizedAnswers.Count;
-        state.SavedAnswersJson = JsonSerializer.Serialize(normalizedAnswers);
+        state.AnsweredCount = normalizedAnswers.Count + (dto.TextAnswers?.Count ?? 0);
+        state.SavedAnswersJson = JsonSerializer.Serialize(new { OptionAnswers = normalizedAnswers, TextAnswers = dto.TextAnswers });
         state.LastActivityAt = DateTime.Now;
         state.LastSavedAt = DateTime.Now;
         state.SubmittedAt = DateTime.Now;
@@ -1593,44 +1597,80 @@ public class StudentController : Controller
         return (userExam, state);
     }
 
-    private async Task SyncUserAnswersAsync(int userExamId, Dictionary<int, int?> answers)
+    private async Task SyncUserAnswersAsync(int userExamId, Dictionary<int, int?>? answers, Dictionary<int, string>? textAnswers)
     {
-        var existingAnswers = await _db.UserAnswers.Where(a => a.UserExamId == userExamId).ToListAsync();
+        var existingAnswers = await _db.UserAnswers.Where(a => a.UserExamId == userExamId).ToDictionaryAsync(a => a.QuestionId);
 
-        var selectedOptionIds = answers.Values
-            .Where(v => v.HasValue)
-            .Select(v => v!.Value)
-            .Distinct()
-            .ToList();
+        var questionIds = new List<int>();
+        if (answers != null) questionIds.AddRange(answers.Keys);
+        if (textAnswers != null) questionIds.AddRange(textAnswers.Keys);
+        questionIds = questionIds.Distinct().ToList();
 
-        var correctLookup = await _db.QuestionOptions
-            .Where(o => selectedOptionIds.Contains(o.OptionId))
-            .ToDictionaryAsync(o => o.OptionId, o => o.IsCorrect == true);
+        var questions = await _db.QuestionBanks
+            .Include(q => q.QuestionOptions)
+            .Where(q => questionIds.Contains(q.QuestionId))
+            .ToDictionaryAsync(q => q.QuestionId);
 
-        foreach (var existing in existingAnswers)
+        foreach (var qId in questionIds)
         {
-            if (!answers.TryGetValue(existing.QuestionId, out var optionId) || !optionId.HasValue)
+            if (!questions.TryGetValue(qId, out var q)) continue;
+
+            int? optionId = null;
+            string? textResponse = null;
+            bool? isCorrect = false;
+
+            if (q.QuestionType == "Essay" || q.QuestionType == "FillInTheBlank")
             {
-                _db.UserAnswers.Remove(existing);
-                continue;
+                if (textAnswers != null && textAnswers.TryGetValue(qId, out var tr))
+                {
+                    textResponse = tr;
+                    if (q.QuestionType == "FillInTheBlank")
+                    {
+                        var correctOpts = q.QuestionOptions.Where(o => o.IsCorrect == true).Select(o => o.OptionText?.Trim().ToLower()).ToList();
+                        isCorrect = !string.IsNullOrWhiteSpace(textResponse) && correctOpts.Any(opt => opt != null && opt == textResponse.Trim().ToLower());
+                    }
+                    else if (q.QuestionType == "Essay")
+                    {
+                        isCorrect = !string.IsNullOrWhiteSpace(textResponse);
+                    }
+                }
+            }
+            else
+            {
+                if (answers != null && answers.TryGetValue(qId, out var optId) && optId.HasValue)
+                {
+                    optionId = optId.Value;
+                    var opt = q.QuestionOptions.FirstOrDefault(o => o.OptionId == optionId.Value);
+                    isCorrect = opt?.IsCorrect == true;
+                }
             }
 
-            existing.OptionId = optionId.Value;
-            existing.IsCorrect = correctLookup.TryGetValue(optionId.Value, out var isCorrect) && isCorrect;
+            if (existingAnswers.TryGetValue(qId, out var existing))
+            {
+                existing.OptionId = optionId;
+                existing.TextResponse = textResponse;
+                existing.IsCorrect = isCorrect;
+            }
+            else
+            {
+                _db.UserAnswers.Add(new UserAnswer
+                {
+                    UserExamId = userExamId,
+                    QuestionId = qId,
+                    OptionId = optionId,
+                    TextResponse = textResponse,
+                    IsCorrect = isCorrect
+                });
+            }
         }
 
-        var existingQuestionIds = existingAnswers.Select(a => a.QuestionId).ToHashSet();
-        foreach (var answer in answers)
+        var qIdsSet = questionIds.ToHashSet();
+        foreach (var existingKey in existingAnswers.Keys)
         {
-            if (!answer.Value.HasValue || existingQuestionIds.Contains(answer.Key)) continue;
-
-            _db.UserAnswers.Add(new UserAnswer
+            if (!qIdsSet.Contains(existingKey))
             {
-                UserExamId = userExamId,
-                QuestionId = answer.Key,
-                OptionId = answer.Value.Value,
-                IsCorrect = correctLookup.TryGetValue(answer.Value.Value, out var isCorrect) && isCorrect
-            });
+                _db.UserAnswers.Remove(existingAnswers[existingKey]);
+            }
         }
     }
 
@@ -1725,6 +1765,157 @@ public class StudentController : Controller
             }
         }
     }
+
+    [HttpPost("/api/student/courses/{courseId}/request-extension")]
+    public async Task<IActionResult> RequestExtension(int courseId, [FromBody] RequestExtensionDto dto)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var student = await _db.Users.FindAsync(userId);
+        if (student == null) return NotFound("Học viên không tồn tại.");
+
+        var assignment = await _db.TrainingAssignments
+            .Include(ta => ta.Course)
+            .FirstOrDefaultAsync(ta => ta.CourseId == courseId && ta.UserId == userId);
+
+        if (assignment == null)
+        {
+            return BadRequest(new { error = "Không tìm thấy phân công đào tạo của khóa học này để gia hạn." });
+        }
+
+        var courseTitle = assignment.Course?.Title ?? "Khóa học";
+        var studentName = student.FullName ?? student.Username ?? "Học viên";
+
+        var managerId = assignment.AssignedBy;
+        if (!managerId.HasValue || managerId == 0)
+        {
+            var deptManager = await _db.Users
+                .Include(u => u.Roles)
+                .FirstOrDefaultAsync(u => u.DepartmentId == student.DepartmentId && 
+                    (u.IsDeptAdmin == true || u.Roles.Any(r => r.RoleName == "Manager" || r.RoleName == "DEPT ADMIN" || r.RoleName == "HR MANAGER")));
+            managerId = deptManager?.UserId;
+        }
+
+        if (!managerId.HasValue || managerId == 0)
+        {
+            var fallbackManager = await _db.Users
+                .Include(u => u.Roles)
+                .FirstOrDefaultAsync(u => u.IsItadmin == true || u.IsDeptAdmin == true || 
+                    u.Roles.Any(r => r.RoleName == "IT" || r.RoleName == "Manager" || r.RoleName == "DEPT ADMIN" || r.RoleName == "HR" || r.RoleName == "HR MANAGER"));
+            managerId = fallbackManager?.UserId;
+        }
+
+        if (!managerId.HasValue || managerId == 0)
+        {
+            return BadRequest(new { error = "Không tìm thấy Trưởng phòng/Quản trị viên để gửi thông báo." });
+        }
+
+        var reason = string.IsNullOrWhiteSpace(dto.Reason) ? "Không có lý do cụ thể" : dto.Reason;
+        var prefix = $"[GIA HẠN - ID:{assignment.AssignmentId}] {studentName} xin gia hạn '{courseTitle}'. Lý do: ";
+        var notifTitle = prefix + reason;
+        if (notifTitle.Length > 255)
+        {
+            notifTitle = notifTitle.Substring(0, 252) + "...";
+        }
+
+        var notification = new Notification
+        {
+            UserId = managerId.Value,
+            Title = notifTitle,
+            IsRead = false
+        };
+
+        _db.Notifications.Add(notification);
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            var innerMsg = ex.InnerException?.Message ?? ex.Message;
+            Console.WriteLine($"[ERROR] SaveChanges error in RequestExtension: {innerMsg}");
+            return StatusCode(500, new { error = $"Lỗi cơ sở dữ liệu: {innerMsg}" });
+        }
+
+        return Ok(new { success = true });
+    }
+
+    [HttpGet("/Student/DownloadAttachment/{id}")]
+    public async Task<IActionResult> DownloadAttachment(int id)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return RedirectToAction("Login", "Auth");
+
+        var attachment = await _db.LessonAttachments
+            .Include(a => a.Lesson)
+                .ThenInclude(l => l!.Module)
+            .FirstOrDefaultAsync(a => a.AttachmentId == id);
+
+        if (attachment == null) return NotFound("Không tìm thấy tài liệu.");
+
+        if (attachment.Lesson?.Module?.CourseId != null)
+        {
+            var isEnrolled = await _db.Enrollments.AnyAsync(e => e.UserId == userId && e.CourseId == attachment.Lesson.Module.CourseId);
+            if (!isEnrolled) return Forbid();
+        }
+
+        var filePath = attachment.FilePath;
+        if (string.IsNullOrEmpty(filePath)) return NotFound("Đường dẫn tài liệu trống.");
+
+        if (filePath.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+        {
+            var redirectUrl = filePath;
+            if (filePath.Contains("drive.google.com"))
+            {
+                redirectUrl = GetGoogleDriveDownloadUrlInternal(filePath);
+            }
+            return Redirect(redirectUrl);
+        }
+
+        var physicalPath = Path.Combine(_env.WebRootPath, filePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+
+        if (!System.IO.File.Exists(physicalPath))
+        {
+            throw new FileNotFoundException($"Không tìm thấy file vật lý trên server.\nĐường dẫn tìm kiếm: {physicalPath}\nWebRootPath của ứng dụng: {_env.WebRootPath}\nThư mục làm việc hiện tại: {Directory.GetCurrentDirectory()}\nFilePath trong DB: {filePath}");
+        }
+
+        var provider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+        if (!provider.TryGetContentType(physicalPath, out var contentType))
+        {
+            contentType = "application/octet-stream";
+        }
+
+        var downloadName = attachment.FileName ?? Path.GetFileName(physicalPath);
+        return PhysicalFile(physicalPath, contentType, downloadName);
+    }
+
+    private string GetGoogleDriveDownloadUrlInternal(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return url;
+        string fileId = "";
+        if (url.Contains("/file/d/"))
+        {
+            var parts = url.Split("/file/d/");
+            if (parts.Length > 1)
+            {
+                fileId = parts[1].Split('/')[0].Split('?')[0];
+            }
+        }
+        else if (url.Contains("?id=") || url.Contains("&id="))
+        {
+            var parts = url.Split(new[] { "?id=", "&id=" }, StringSplitOptions.None);
+            if (parts.Length > 1)
+            {
+                fileId = parts[1].Split('&')[0];
+            }
+        }
+        if (!string.IsNullOrEmpty(fileId))
+        {
+            return $"https://drive.google.com/uc?export=download&id={fileId}";
+        }
+        return url;
+    }
 }
 
 public class StudentQuestionDto
@@ -1740,6 +1931,7 @@ public class SaveQuizStateDto
     public int CurrentQuestionIndex { get; set; }
     public int RemainingSeconds { get; set; }
     public Dictionary<int, int?>? Answers { get; set; }
+    public Dictionary<int, string>? TextAnswers { get; set; }
 }
 
 public class SubmitQuizDto
@@ -1748,6 +1940,7 @@ public class SubmitQuizDto
     public int CurrentQuestionIndex { get; set; }
     public int RemainingSeconds { get; set; }
     public Dictionary<int, int?>? Answers { get; set; }
+    public Dictionary<int, string>? TextAnswers { get; set; }
 }
 
 public record CourseEvaluationResult(
@@ -1784,4 +1977,9 @@ public class CourseFeedbackDto
 {
     public int Rating { get; set; }
     public string? Comment { get; set; }
+}
+
+public class RequestExtensionDto
+{
+    public string? Reason { get; set; }
 }

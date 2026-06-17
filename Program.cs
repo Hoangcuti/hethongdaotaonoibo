@@ -37,9 +37,14 @@ builder.Services.AddScoped<KhoaHoc.BusinessLogicLayer.Services.ICourseService, K
 builder.Services.AddScoped<KhoaHoc.BusinessLogicLayer.Services.IStudentService, KhoaHoc.BusinessLogicLayer.Services.StudentService>();
 
 builder.Services.AddControllersWithViews();
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 10L * 1024L * 1024L * 1024L; // 10GB
+});
+
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 1024L * 1024L * 1024L;
+    options.MultipartBodyLengthLimit = 10L * 1024L * 1024L * 1024L; // 10GB
 });
 
 var keysPath = Path.Combine(builder.Environment.WebRootPath ?? builder.Environment.ContentRootPath, "App_Data", "Keys");
@@ -150,4 +155,5 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Auth}/{action=Login}/{id?}");
 
+// Trigger dotnet watch restart
 app.Run();

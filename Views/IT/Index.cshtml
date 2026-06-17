@@ -1,8 +1,7 @@
-﻿@{
+@{
     ViewData["Title"] = "Dashboard IT Admin";
     Layout = "_Layout";
 }
-
 @section Header {
     <meta name="description" content="Dashboard quản trị IT - quản lý tài khoản và hệ thống LMS" />
     <style>
@@ -18,19 +17,37 @@
         .level-1 { background: #dcfce7; color: #166534; }
         .level-2 { background: #fef9c3; color: #854d0e; }
         .level-3 { background: #fee2e2; color: #991b1b; }
+        .role-checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .role-checkbox-label:hover {
+            background: #eff6ff;
+            border-color: #3b82f6;
+        }
+        .role-checkbox-label input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #3b82f6;
+            cursor: pointer;
+            margin: 0;
+        }
+        .role-checkbox-label span {
+            font-weight: 500;
+            color: #334155;
+            font-size: 14px;
+        }
     </style>
 }
-
-<div class="page-header">
-    <div>
-        <div class="page-title" id="pageTitle">Tổng quan hệ thống</div>
-        <div class="page-subtitle" id="pageSubtitle">Giám sát và quản lý hạ tầng LMS</div>
-    </div>
-</div>
-
 <div class="content-area">
     <!-- Nav Pills Removed (now handled by sidebar) -->
-
     <!-- ====== PAGE: Overview ====== -->
     <div id="overview" class="page-section fade-in">
         <div class="stats-grid" id="itStatsGrid">
@@ -38,7 +55,7 @@
         </div>
         <div class="grid-2">
             <div class="card">
-                <div class="card-header"><div class="card-title">📊 Phân bổ người dùng</div></div>
+                <div class="card-header"><div class="card-title">📊 Tiến độ học tập chung</div></div>
                 <div class="card-body">
                     <div id="userChartEmpty" style="display:none;padding:40px;text-align:center;color:#94a3b8">Chưa có dữ liệu</div>
                     <canvas id="userChart" height="180"></canvas>
@@ -51,7 +68,16 @@
                 </div>
             </div>
         </div>
+        <div class="card" style="margin-top: 20px;">
+            <div class="card-header"><div class="card-title">🏆 Bảng xếp hạng học tập theo phòng ban</div></div>
+            <div class="card-body" style="padding: 0; overflow-x: auto;">
+                <div id="deptLeaderboard" style="position:relative; min-height:150px">
+                    <div class="loading-overlay"><div class="spinner"></div></div>
+                </div>
+            </div>
+        </div>
     </div>
+
 
     <!-- ====== PAGE: Users ====== -->
     <div id="users" class="page-section" style="display:none">
@@ -220,6 +246,53 @@
                     </thead>
                     <tbody id="faqsTable">
                         <tr><td colspan="4"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======= PAGE: EXAMS ======= -->
+    <div id="exams" class="page-section" style="display:none">
+        <div class="card" style="margin-bottom:16px">
+            <div class="card-header" style="border-bottom:none; padding-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div class="card-title">📝 Quản lý bài kiểm tra & Đánh giá</div>
+                    <div class="card-subtitle">Theo dõi thống kê Đạt / Không đạt và thiết lập cấu trúc đề thi kéo thả.</div>
+                </div>
+                <button class="btn btn-primary" onclick="openCreateExamModal()">➕ Tạo bài thi mới</button>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+            <div class="card-body" style="padding:14px 20px">
+                <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+                    <div class="input-wrap" style="flex:1;min-width:240px">
+                        <span class="input-icon">🔍</span>
+                        <input id="examsSearch" type="text" class="form-input with-icon" placeholder="Tìm theo tên bài thi hoặc khóa học..." oninput="renderExamsPageList()">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="table-wrapper">
+                <table class="lms-table">
+                    <thead>
+                        <tr>
+                            <th style="width:50px">ID</th>
+                            <th>Tên bài thi</th>
+                            <th>Khóa học</th>
+                            <th>Số câu hỏi</th>
+                            <th>Thời gian</th>
+                            <th>Điểm qua</th>
+                            <th>Đạt</th>
+                            <th>Không đạt</th>
+                            <th style="text-align:right">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="examsTableBody">
+                        <tr><td colspan="9"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
                     </tbody>
                 </table>
             </div>
@@ -751,7 +824,10 @@
         <div class="modal-body">
             <input type="hidden" id="userRoleUserId">
             <div class="form-group"><label>Nhân viên</label><input id="userRoleUserName" class="form-input" disabled></div>
-            <div class="form-group"><label>Roles</label><select id="userRoleSelect" class="form-input" multiple="multiple" style="height: 160px; padding: 4px;"></select></div>
+            <div class="form-group">
+                <label>Roles</label>
+                <div id="userRoleCheckboxContainer" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding: 12px; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);"></div>
+            </div>
         </div>
         <div class="modal-footer"><button class="btn btn-primary" onclick="submitUserRoles()">💾 Lưu</button></div>
     </div>
@@ -1478,6 +1554,125 @@
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeModal('bulkDeptModal')">Hủy bỏ</button>
             <button class="btn btn-primary" onclick="submitBulkDeptUpdate()">🚀 Xác nhận cập nhật</button>
+        </div>
+    </div>
+</div>
+
+<!-- Exam Builder Modal -->
+<div class="modal-backdrop" id="examBuilderModal">
+    <div class="modal-box" style="max-width:1440px; width:98vw; height:95vh; display:flex; flex-direction:column; overflow:hidden;">
+        <div class="modal-header">
+            <div>
+                <div class="modal-title" id="examBuilderTitle">Xây dựng cấu trúc bài thi</div>
+                <div style="font-size:12px; color: #64748b; margin-top:4px;">Kéo thả câu hỏi từ Ngân hàng câu hỏi bên trái vào Bài thi bên phải</div>
+            </div>
+            <button class="modal-close" onclick="closeModal('examBuilderModal')">✖</button>
+        </div>
+        <div class="modal-body" style="flex:1; display:flex; padding:0; background:#f1f5f9; overflow:hidden;">
+            <input type="hidden" id="builderExamId">
+
+            <!-- LEFT: Questions Pool (Drag Source) -->
+            <div style="width:450px; display:flex; flex-direction:column; background:#fff; border-right:2px solid #e2e8f0; height:100%;">
+                <div style="padding:12px; background:#f8fafc; border-bottom:1px solid #e2e8f0; display:flex; flex-direction:column; gap:8px;">
+                    <div style="font-weight:700; color:#1e293b; font-size:13px; text-transform:uppercase; letter-spacing:0.05em;">Ngân hàng câu hỏi</div>
+                    <div class="input-wrap" style="width:100%">
+                        <span class="input-icon">🔍</span>
+                        <input id="examBuilderPoolSearch" type="text" class="form-input with-icon" style="height:32px; font-size:12px;" placeholder="Tìm câu hỏi..." oninput="renderExamBuilderPool()">
+                    </div>
+                </div>
+
+                <div style="flex:1; display:grid; grid-template-rows: 1fr 1fr 1fr; gap:2px; background:#e2e8f0; overflow:hidden;">
+                    <!-- Trắc nghiệm -->
+                    <div style="background:#fff; display:flex; flex-direction:column; overflow:hidden;">
+                        <div style="padding:8px 12px; background:#eff6ff; color:#1d4ed8; font-weight:600; font-size:12px;">
+                            <span>Trắc nghiệm (Multiple Choice)</span>
+                        </div>
+                        <div style="flex:1; overflow-y:auto; padding:8px;" id="builderPoolMCList"></div>
+                    </div>
+
+                    <!-- Tự luận -->
+                    <div style="background:#fff; display:flex; flex-direction:column; overflow:hidden;">
+                        <div style="padding:8px 12px; background:#f5f3ff; color:#7c3aed; font-weight:600; font-size:12px;">
+                            <span>Tự luận (Essay)</span>
+                        </div>
+                        <div style="flex:1; overflow-y:auto; padding:8px;" id="builderPoolEssayList"></div>
+                    </div>
+
+                    <!-- Điền từ -->
+                    <div style="background:#fff; display:flex; flex-direction:column; overflow:hidden;">
+                        <div style="padding:8px 12px; background:#fff7ed; color:#c2410c; font-weight:600; font-size:12px;">
+                            <span>Điền từ (Fill in the blank)</span>
+                        </div>
+                        <div style="flex:1; overflow-y:auto; padding:8px;" id="builderPoolFITBList"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT: Exam Structure (Drop Zone) -->
+            <div style="flex:1; display:flex; flex-direction:column; height:100%; position:relative;">
+                <div style="padding:12px 20px; background:#fff; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-weight:700; color:#1e293b; font-size:14px;">Câu hỏi trong bài thi hiện tại</span>
+                    <button class="btn btn-primary btn-sm" onclick="saveExamStructureClick()">💾 Lưu cấu trúc</button>
+                </div>
+
+                <div style="flex:1; overflow-y:auto; padding:30px; background:#f1f5f9;" id="examDropZone" ondragover="handleExamDragOver(event)" ondragleave="handleExamDragLeave(event)" ondrop="handleExamDrop(event)">
+                    <div id="examBuilderStructureList" style="display:flex; flex-direction:column; gap:12px;"></div>
+
+                    <div id="examBuilderEmptyMessage" style="text-align:center; padding:60px; border:3px dashed #cbd5e1; border-radius:12px; color:#94a3b8; margin-top:20px;">
+                        <span style="font-size:48px;">📝</span>
+                        <h4 style="margin-top:12px; color:#64748b;">Chưa có câu hỏi nào trong đề thi này</h4>
+                        <p style="font-size:13px; color:#94a3b8; margin-top:4px;">Kéo thả câu hỏi từ ngân hàng bên trái hoặc nhấp dấu ➕ để đưa vào đề thi.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Exam Participants Stats Modal -->
+<div class="modal-backdrop" id="examParticipantsModal">
+    <div class="modal-box" style="max-width:800px; width:90vw;">
+        <div class="modal-header">
+            <div>
+                <div class="modal-title" id="participantsModalTitle">Chi tiết tình hình làm bài thi</div>
+                <div style="font-size:12px; color: #64748b; margin-top:4px;">Danh sách nhân viên và trạng thái kết quả bài thi</div>
+            </div>
+            <button class="modal-close" onclick="closeModal('examParticipantsModal')">✖</button>
+        </div>
+        <div class="modal-body" style="max-height: 60vh; overflow-y: auto; padding: 20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; gap: 12px; flex-wrap: wrap;">
+                <div class="input-wrap" style="flex:1; min-width:200px;">
+                    <span class="input-icon">🔍</span>
+                    <input id="participantsSearch" type="text" class="form-input with-icon" placeholder="Tìm tên nhân viên..." oninput="renderParticipantsList()">
+                </div>
+                <select id="participantsStatusFilter" class="form-input" style="width:160px;" onchange="renderParticipantsList()">
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="Đạt">Đạt</option>
+                    <option value="Không đạt">Không đạt</option>
+                    <option value="Chưa làm">Chưa làm</option>
+                    <option value="Đang làm">Đang làm</option>
+                </select>
+            </div>
+            <div class="table-wrapper">
+                <table class="lms-table" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th>Mã NV</th>
+                            <th>Họ tên</th>
+                            <th>Phòng ban</th>
+                            <th>Điểm</th>
+                            <th>Trạng thái</th>
+                            <th>Ngày nộp</th>
+                        </tr>
+                    </thead>
+                    <tbody id="participantsTableBody">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('examParticipantsModal')">Đóng</button>
         </div>
     </div>
 </div>

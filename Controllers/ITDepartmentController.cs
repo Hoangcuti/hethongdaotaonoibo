@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ClosedXML.Excel;
@@ -105,7 +105,7 @@ public partial class ITController : Controller
 
         if (string.IsNullOrWhiteSpace(dto.DepartmentName)) return BadRequest("Name required");
         if (await _db.Departments.AnyAsync(d => d.DepartmentName.ToLower() == dto.DepartmentName.Trim().ToLower()))
-            return BadRequest(new { error = $"Ph?ng ban {dto.DepartmentName.Trim()} d? t?n t?i." });
+            return BadRequest(new { error = $"Phòng ban {dto.DepartmentName.Trim()} đã tồn tại." });
         
         var dept = new Department { DepartmentName = dto.DepartmentName };
         _db.Departments.Add(dept);
@@ -122,7 +122,7 @@ public partial class ITController : Controller
         if (dept == null) return NotFound();
 
         if (await _db.Departments.AnyAsync(d => d.DepartmentId != id && d.DepartmentName.ToLower() == dto.DepartmentName.Trim().ToLower()))
-            return BadRequest(new { error = $"Ph?ng ban {dto.DepartmentName.Trim()} d? t?n t?i." });
+            return BadRequest(new { error = $"Phòng ban {dto.DepartmentName.Trim()} đã tồn tại." });
 
         dept.DepartmentName = dto.DepartmentName;
         await _db.SaveChangesAsync();

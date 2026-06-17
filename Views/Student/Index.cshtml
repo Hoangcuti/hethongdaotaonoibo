@@ -1,4 +1,4 @@
-﻿@{
+@{
     Layout = null;
 }
 <!DOCTYPE html>
@@ -745,11 +745,16 @@
             showToast('Đổi mật khẩu thành công.');
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
+        function startStudentApp() {
             initializeTheme();
             initializeShell();
             initStudentDashboard();
-        });
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startStudentApp);
+        } else {
+            startStudentApp();
+        }
     </script>
 </body>
 </html>

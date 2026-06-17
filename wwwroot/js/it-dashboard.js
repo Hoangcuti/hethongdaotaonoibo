@@ -14,12 +14,19 @@ let currentUserPermissionKeys = new Set();
 let documentLibraryData = { courses: [], modules: [], lessons: [], exams: [] };
 let currentLibraryTab = 'modules';
 let lastGeneratedQuestions = [];
+let loadedExamsList = [];
+let allQuestionPoolData = [];
+let builderActiveExamQuestions = [];
+let builderExamId = null;
+let examDragData = null;
+let loadedParticipants = [];
 
 const pagePermissionMap = {
     overview: 'dashboard.view',
     users: 'users.manage',
     departments: 'departments.manage',
     courses: 'courses.manage',
+    exams: 'courses.manage',
     documents: 'content.documents.manage',
     schedules: 'schedules.manage',
     categories: 'categories.manage',
@@ -128,11 +135,23 @@ async function refreshPermissionUsers() {
 async function refreshMyPermissionProfile() {
     try {
         const data = await apiFetch('/api/it/my-permissions');
+        // IT Admin luôn có toàn quyền bất kể DB permissions có hay chưa
+        if (data.isItAdmin === true) {
+            currentUserPermissionKeys = new Set(Object.values(pagePermissionMap));
+            applyPermissionVisibility();
+            return;
+        }
         currentUserPermissionKeys = new Set((data.permissions || []).map(p => String(p).toLowerCase()));
+        // Nếu rỗng (chưa có permission nào), cấp full quyền
+        if (currentUserPermissionKeys.size === 0) {
+            currentUserPermissionKeys = new Set(Object.values(pagePermissionMap));
+        }
         applyPermissionVisibility();
     } catch (e) {
-        currentUserPermissionKeys = new Set();
+        // Khi lỗi kết nối, vẫn cấp full quyền để tránh admin bị khoá màn hình
+        currentUserPermissionKeys = new Set(Object.values(pagePermissionMap));
         applyPermissionVisibility();
+        console.warn('Permission load failed, using default full access:', e.message);
     }
 }
 
@@ -188,7 +207,9 @@ async function init() {
 }
 
 function navigate(page) {
-    if (pagePermissionMap[page] && !hasPermission(pagePermissionMap[page])) {
+
+    // overview luôn được phép, không block trang chủ
+    if (page !== 'overview' && pagePermissionMap[page] && !hasPermission(pagePermissionMap[page])) {
         showToast('Tài khoản này chưa được cấp quyền để mở chức năng đó.', 'warning');
         return;
     }
@@ -207,6 +228,7 @@ function navigate(page) {
         "overview": { title: "Tổng quan hệ thống", sub: "Giám sát và quản lý hạ tầng LMS" },
         "users": { title: "Quản lý người dùng", sub: "Tìm kiếm, thêm mới và quản lý tài khoản" },
         "courses": { title: "Quản lý khóa học", sub: "Cấu hình và kiểm soát nội dung khóa học" },
+        "exams": { title: "Quản lý bài kiểm tra & Đánh giá", sub: "Theo dõi thống kê Đạt / Không đạt và thiết lập cấu trúc đề thi kéo thả." },
         "documents": { title: "Kho tài liệu", sub: "Quản lý kho chương, bài giảng và quiz toàn hệ thống" },
         "schedules": { title: "Quản lý lịch học", sub: "Thêm, sửa và xóa lịch học offline cho nhân viên" },
         "departments": { title: "Quản lý phòng ban", sub: "Tổ chức cơ cấu nhân sự" },
@@ -243,6 +265,7 @@ function navigate(page) {
     if (page === 'overview') loadOverview();
     else if (page === 'users') loadUsers();
     else if (page === 'courses') loadItCourses();
+    else if (page === 'exams') loadExamsPageData();
     else if (page === 'documents') loadDocumentLibrary();
     else if (page === 'schedules') loadSchedules();
     else if (page === 'departments') loadItDepartments();
@@ -767,18 +790,32 @@ async function submitLibraryExam() {
 }
 
 async function generateQuizWithAI(source = 'library') {
-    const prompt = document.getElementById(source === 'library' ? 'aiQuizPrompt' : 'aiExamPrompt').value;
-    const statusDiv = document.getElementById(source === 'library' ? 'aiQuizStatus' : 'aiExamStatus');
-    const btn = document.getElementById(source === 'library' ? 'btnGenerateQuizAI' : 'btnGenerateExamAI');
+    const isLibrary = (source === 'library');
+    const promptId = isLibrary ? 'aiQuizPrompt' : 'aiExamPrompt';
+    const statusDivId = isLibrary ? 'aiQuizStatus' : 'aiExamStatus';
+    const btnId = isLibrary ? 'btnGenerateQuizAI' : 'btnGenerateExamAI';
+    const titleId = isLibrary ? 'libraryExamTitleInput' : 'examTitleInput';
+    const durationId = isLibrary ? 'libraryExamDurationInput' : 'examDurationInput';
+
+    const promptEl = document.getElementById(promptId);
+    const prompt = promptEl ? promptEl.value.trim() : '';
     
     if (!prompt) {
-        showToast('Vui lòng nhập yêu cầu cho AI', 'warning');
+        showToast('Hãy nhập mô tả bài thi!', 'warning');
         return;
     }
     
-    btn.disabled = true;
-    btn.innerText = 'Đang xử lý...';
-    statusDiv.innerText = '⏳ AI đang thiết kế bộ câu hỏi...';
+    const btn = document.getElementById(btnId);
+    const statusDiv = document.getElementById(statusDivId);
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '✨ Đang tạo...';
+    }
+    if (statusDiv) {
+        statusDiv.innerText = '⏳ AI đang thiết kế bộ câu hỏi...';
+        statusDiv.style.color = '#f59e0b';
+    }
     
     try {
         const result = await apiFetch('/api/it/generate-quiz-ai', {
@@ -787,78 +824,109 @@ async function generateQuizWithAI(source = 'library') {
         });
 
         if (result && result.examTitle) {
-            document.getElementById(source === 'library' ? 'libraryExamTitleInput' : 'examTitleInput').value = result.examTitle;
+            const titleEl = document.getElementById(titleId);
+            if (titleEl) titleEl.value = result.examTitle;
+
+            const durationEl = document.getElementById(durationId);
+            if (durationEl) durationEl.value = result.durationMinutes || 30;
+
             if (result.questions) {
                 lastGeneratedQuestions = result.questions.map(q => ({
                     questionText: q.questionText,
                     points: q.points || 10,
-                    options: q.options.map((opt, idx) => ({
-                        optionText: opt,
-                        isCorrect: (idx + 1) === q.correctOptionIndex
-                    }))
+                    options: (q.options || []).map((opt, idx) => {
+                        const optText = typeof opt === 'object' ? opt.optionText : opt;
+                        return {
+                            optionText: optText,
+                            isCorrect: (idx + 1) === q.correctOptionIndex
+                        };
+                    })
                 }));
-                statusDiv.innerText = `✅ Đã soạn ${lastGeneratedQuestions.length} câu hỏi.`;
-                showToast('AI đã soạn thảo xong!');
+                if (statusDiv) {
+                    statusDiv.innerText = `✅ Đã soạn ${lastGeneratedQuestions.length} câu hỏi. Hãy nhấn "Lưu" để hoàn tất.`;
+                    statusDiv.style.color = '#10b981';
+                }
+                showToast(`AI đã tạo ${lastGeneratedQuestions.length} câu hỏi!`, 'success');
             }
         }
     } catch(e) {
         showToast('Lỗi AI: ' + e.message, 'error');
+        if (statusDiv) {
+            statusDiv.innerText = '❌ Lỗi: ' + e.message;
+            statusDiv.style.color = '#ef4444';
+        }
     } finally {
-        btn.disabled = false;
-        btn.innerText = 'Tạo từ Text';
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = 'Tạo từ Text';
+        }
     }
 }
 
 async function generateQuizFromFile(source = 'exam') {
-    const fileInput = document.getElementById(source === 'exam' ? 'examFileAI' : 'libraryExamFileAI');
-    const statusDiv = document.getElementById(source === 'exam' ? 'aiExamStatus' : 'aiQuizStatus');
-    
-    if (!fileInput.files || fileInput.files.length === 0) {
-        showToast('Vui lòng chọn file document (PDF, Docx, TXT...)', 'warning');
+    const isLibrary = (source === 'library');
+    const fileInputId = isLibrary ? 'libraryExamFileAI' : 'examFileAI';
+    const statusDivId = isLibrary ? 'aiQuizStatus' : 'aiExamStatus';
+    const titleId = isLibrary ? 'libraryExamTitleInput' : 'examTitleInput';
+    const durationId = isLibrary ? 'libraryExamDurationInput' : 'examDurationInput';
+
+    const fileInput = document.getElementById(fileInputId);
+    if (!fileInput || !fileInput.files.length) {
+        showToast('Hãy chọn file document!', 'warning');
         return;
+    }
+    
+    const statusDiv = document.getElementById(statusDivId);
+    if (statusDiv) {
+        statusDiv.innerText = '⏳ Đang đọc file và trích xuất câu hỏi...';
+        statusDiv.style.color = '#f59e0b';
     }
 
     const file = fileInput.files[0];
-    statusDiv.innerText = '⏳ Đang đọc file và trích xuất câu hỏi...';
-    statusDiv.style.color = '#f59e0b';
-
-    try {
-        const base64Full = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-        });
-        
-        const pureBase64 = base64Full.split(',')[1];
-        
-        const result = await apiFetch('/api/it/generate-quiz-from-file', {
-            method: 'POST',
-            body: JSON.stringify({
-                base64Data: pureBase64,
-                mimeType: file.type || 'application/pdf'
-            })
-        });
-
-        if (result && result.questions) {
-            lastGeneratedQuestions = result.questions.map(q => ({
+    const reader = new FileReader();
+    
+    reader.onload = async () => {
+        const base64Data = reader.result.split(',')[1];
+        try {
+            const data = await apiFetch('/api/it/generate-quiz-from-file', {
+                method: 'POST',
+                body: JSON.stringify({ base64Data, mimeType: file.type || 'application/pdf' })
+            });
+            
+            const titleEl = document.getElementById(titleId);
+            if (titleEl) titleEl.value = data.examTitle || (isLibrary ? 'Quiz từ File' : 'Quiz mới');
+            
+            const durationEl = document.getElementById(durationId);
+            if (durationEl) durationEl.value = data.durationMinutes || 30;
+            
+            // Transform AI data to match ItCreateQuestionDto structure
+            lastGeneratedQuestions = (data.questions || []).map(q => ({
                 questionText: q.questionText,
                 points: q.points || 10,
-                options: q.options.map((opt, idx) => ({
-                    optionText: opt,
-                    isCorrect: (idx + 1) === q.correctOptionIndex
-                }))
+                options: (q.options || []).map((opt, idx) => {
+                    const optText = typeof opt === 'object' ? opt.optionText : opt;
+                    return {
+                        optionText: optText,
+                        isCorrect: (idx + 1) === q.correctOptionIndex
+                    };
+                })
             }));
             
-            statusDiv.innerText = `✅ Đã trích xuất ${lastGeneratedQuestions.length} câu hỏi thành công!`;
-            statusDiv.style.color = '#10b981';
-            showToast('Đã trích xuất câu hỏi từ file!');
+            showToast(`AI đã tạo ${lastGeneratedQuestions.length} câu hỏi từ file!`, 'success');
+            
+            if (statusDiv) {
+                statusDiv.innerText = `✅ Đã tách ${lastGeneratedQuestions.length} câu từ file. Hãy nhấn "Lưu" để hoàn tất.`;
+                statusDiv.style.color = '#10b981';
+            }
+        } catch (e) {
+            showToast('Lỗi AI: ' + e.message, 'error');
+            if (statusDiv) {
+                statusDiv.innerText = '❌ Lỗi: ' + e.message;
+                statusDiv.style.color = '#ef4444';
+            }
         }
-    } catch(e) {
-        statusDiv.innerText = '❌ Lỗi: ' + e.message;
-        statusDiv.style.color = '#ef4444';
-        showToast('Lỗi xử lý file AI', 'error');
-    }
+    };
+    reader.readAsDataURL(file);
 }
 
 async function generateModuleWithAI(source) {
@@ -926,6 +994,7 @@ async function loadOverview() {
     console.log('IT Dashboard: Loading overview data...');
     const grid = document.getElementById('itStatsGrid');
     const logs = document.getElementById('recentLogs');
+    const leaderboard = document.getElementById('deptLeaderboard');
     
     try {
         const [stats, activeStats] = await Promise.all([
@@ -938,7 +1007,7 @@ async function loadOverview() {
                 <div class="stat-card blue">
                     <div class="stat-icon blue">👥</div>
                     <div class="stat-value">${fmtNumber(stats.totalUsers || 0)}</div>
-                    <div class="stat-label">Người dùng</div>
+                    <div class="stat-label">Nhân sự</div>
                 </div>
                 <div class="stat-card green">
                     <div class="stat-icon green">🏢</div>
@@ -946,32 +1015,34 @@ async function loadOverview() {
                     <div class="stat-label">Phòng ban</div>
                 </div>
                 <div class="stat-card purple">
-                    <div class="stat-icon purple">☁️</div>
-                    <div class="stat-value">${fmtNumber(stats.activeUsers || 0)}</div>
-                    <div class="stat-label">Hoạt động</div>
+                    <div class="stat-icon purple">▤</div>
+                    <div class="stat-value">${fmtNumber(stats.totalCourses || 0)}</div>
+                    <div class="stat-label">Khóa học</div>
                 </div>
                 <div class="stat-card orange" style="--card-accent:#f59e0b">
-                    <div class="stat-icon" style="background:rgba(245,158,11,.12);color:#d97706">🕒</div>
-                    <div class="stat-value">${fmtNumber(activeStats.recentlyActive || 0)}</div>
-                    <div class="stat-label">Online 30 ngày</div>
+                    <div class="stat-icon" style="background:rgba(245,158,11,.12);color:#d97706">📝</div>
+                    <div class="stat-value">${fmtNumber(stats.totalExams || 0)}</div>
+                    <div class="stat-label">Đề thi</div>
                 </div>
             `;
         }
 
-        if (stats.userRoleDist && window.Chart) {
+        if (stats.studyDist && window.Chart) {
             const ctx = document.getElementById('userChart')?.getContext('2d');
             if (ctx) {
                 if (userChart) userChart.destroy();
-                const style = getComputedStyle(document.documentElement);
-                const primaryColor = style.getPropertyValue('--color-primary').trim() || '#0066cc';
-                const successColor = style.getPropertyValue('--color-success').trim() || '#11875d';
-                const infoColor = style.getPropertyValue('--color-info').trim() || '#2454cc';
-                const textColor = style.getPropertyValue('--color-text').trim() || '#1d1d1f';
+                const textColor = getComputedStyle(document.documentElement).getPropertyValue('--color-text').trim() || '#1d1d1f';
                 userChart = new Chart(ctx, {
                     type: 'doughnut',
                     data: {
-                        labels: Object.keys(stats.userRoleDist),
-                        datasets: [{ data: Object.values(stats.userRoleDist), backgroundColor: [primaryColor, successColor, infoColor], borderWidth: 0 }]
+                        labels: Object.keys(stats.studyDist),
+                        datasets: [{ 
+                            data: Object.values(stats.studyDist), 
+                            backgroundColor: ['#10b981', '#f59e0b', '#94a3b8'], 
+                            borderWidth: 0,
+                            borderRadius: 8,
+                            spacing: 3
+                        }]
                     },
                     options: {
                         plugins: {
@@ -985,6 +1056,50 @@ async function loadOverview() {
                         cutout: '70%'
                     }
                 });
+            }
+        }
+
+        if (leaderboard) {
+            if (stats.departments && stats.departments.length > 0) {
+                let html = `
+                    <div class="table-wrapper" style="border: none; border-radius: 0; background: transparent;">
+                        <table class="lms-table" style="min-width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>Tên phòng ban</th>
+                                    <th style="text-align: center;">Số nhân sự</th>
+                                    <th style="text-align: center;">Khóa học đăng ký</th>
+                                    <th style="text-align: center;">Hoàn thành</th>
+                                    <th style="width: 320px;">Tiến độ trung bình</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                html += stats.departments.map(d => `
+                    <tr>
+                        <td style="font-weight: 600; color: var(--color-text);">🏢 ${libraryEscape(d.departmentName)}</td>
+                        <td style="text-align: center;">${d.userCount}</td>
+                        <td style="text-align: center;">${d.enrollmentCount}</td>
+                        <td style="text-align: center;"><span class="badge badge-success">${d.completedCount}</span></td>
+                        <td>
+                            <div class="progress-wrap">
+                                <div class="progress-bar-track">
+                                    <div class="progress-bar-fill" style="width: ${d.avgProgress}%"></div>
+                                </div>
+                                <span style="font-size: 13px; font-weight: 700; color: var(--color-primary); min-width: 45px; text-align: right;">${d.avgProgress.toFixed(1)}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+
+                html += `
+                        </tbody>
+                    </table>
+                `;
+                leaderboard.innerHTML = html;
+            } else {
+                leaderboard.innerHTML = '<div style="padding:40px; text-align:center; color:#94a3b8;">Chưa có dữ liệu phòng ban</div>';
             }
         }
 
@@ -1370,9 +1485,12 @@ async function openUserRoleModal(id) {
     document.getElementById('userRoleUserId').value = id;
     document.getElementById('userRoleUserName').value = user.fullName || user.username || '';
     const selectedRoleIds = new Set((user.roles || []).map(r => String(r.roleId)));
-    document.getElementById('userRoleSelect').innerHTML = availableRoles.map(r =>
-        `<option value="${r.roleId}" ${selectedRoleIds.has(String(r.roleId)) ? 'selected' : ''}>${r.roleName}</option>`
-    ).join('');
+    document.getElementById('userRoleCheckboxContainer').innerHTML = availableRoles.map(r => `
+        <label class="role-checkbox-label">
+            <input type="checkbox" value="${r.roleId}" ${selectedRoleIds.has(String(r.roleId)) ? 'checked' : ''}>
+            <span>${r.roleName}</span>
+        </label>
+    `).join('');
     openModal('userRoleModal');
 }
 
@@ -1381,7 +1499,8 @@ async function submitUserRoles() {
     const user = loadedUsersList.find(u => String(u.userId) === String(userId));
     if (!user) return;
 
-    const selectedRoleIds = Array.from(document.getElementById('userRoleSelect').selectedOptions).map(o => parseInt(o.value));
+    const checkboxes = document.querySelectorAll('#userRoleCheckboxContainer input[type="checkbox"]:checked');
+    const selectedRoleIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
     const currentRoleIds = new Set((user.roles || []).map(r => r.roleId));
 
     try {
@@ -2755,31 +2874,15 @@ async function loadBackupLogs() {
     }
 }
 
-async function downloadBackup(id) {
-    try {
-        const url = `/api/it/backuplogs/download/${id}`;
-        const response = await fetch(url);
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.error || 'Lỗi server: ' + response.status);
-        }
-        const blob = await response.blob();
-        const contentDisp = response.headers.get('Content-Disposition') || '';
-        let fileName = `LMS_Backup_${id}.sql`;
-        const match = contentDisp.match(/filename[^;=\n]*=((['"])(.*?)\2|([^;\n]*))/);
-        if (match) fileName = match[3] || match[4] || fileName;
-
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(a.href);
-        showToast('Tải file backup thành công: ' + fileName, 'success');
-    } catch(e) {
-        showToast('Lỗi tải file backup: ' + (e.message || e), 'error');
-    }
+function downloadBackup(id) {
+    // Dùng link tải trực tiếp thay vì fetch blob để tránh timeout và CORS
+    const a = document.createElement('a');
+    a.href = `/api/it/backuplogs/download/${id}`;
+    a.download = `LMS_Backup_${id}.sql`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('Đang tải file backup...', 'info');
 }
 
 async function deleteBackup(id) {
@@ -3772,82 +3875,7 @@ async function loadAttendanceList() {
     }
 }
 
-async function generateQuizWithAI(type) {
-    const prompt = document.getElementById('aiExamPrompt').value.trim();
-    if (!prompt) { showToast('Hãy nhập mô tả bài thi!', 'warning'); return; }
-    
-    const btn = document.getElementById('btnGenerateExamAI');
-    if (btn) { btn.disabled = true; btn.innerHTML = '✨ Đang tạo...'; }
-    
-    try {
-        const data = await apiFetch('/api/it/exams/generate', {
-            method: 'POST',
-            body: JSON.stringify({ prompt })
-        });
-        
-        document.getElementById('examTitleInput').value = data.examTitle || 'Quiz mới';
-        document.getElementById('examDurationInput').value = data.durationMinutes || 30;
-        
-        // Transform AI data to match ItCreateQuestionDto structure
-        lastGeneratedQuestions = (data.questions || []).map(q => ({
-            questionText: q.questionText,
-            points: q.points || 10,
-            options: (q.options || []).map((optText, idx) => ({
-                optionText: optText,
-                isCorrect: idx === q.correctOptionIndex
-            }))
-        }));
-        
-        showToast(`AI đã tạo ${lastGeneratedQuestions.length} câu hỏi!`, 'success');
-        
-        const status = document.getElementById('aiExamStatus');
-        if (status) status.textContent = `✅ Đã tạo ${lastGeneratedQuestions.length} câu hỏi. Hãy nhấn "Lưu" để hoàn tất.`;
-        
-    } catch (e) {
-        showToast('Lỗi AI: ' + e.message, 'error');
-    } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = 'Tạo từ Text'; }
-    }
-}
-
-async function generateQuizFromFile(type) {
-    const fileInput = document.getElementById('examFileAI');
-    if (!fileInput.files.length) { showToast('Hãy chọn file document!', 'warning'); return; }
-    
-    const file = fileInput.files[0];
-    const reader = new FileReader();
-    
-    reader.onload = async () => {
-        const base64Data = reader.result.split(',')[1];
-        try {
-            const data = await apiFetch('/api/it/exams/generate-from-file', {
-                method: 'POST',
-                body: JSON.stringify({ base64Data, mimeType: file.type })
-            });
-            
-            document.getElementById('examTitleInput').value = data.examTitle || 'Quiz từ File';
-            document.getElementById('examDurationInput').value = data.durationMinutes || 30;
-            
-            // Transform AI data to match ItCreateQuestionDto structure
-            lastGeneratedQuestions = (data.questions || []).map(q => ({
-                questionText: q.questionText,
-                points: q.points || 10,
-                options: (q.options || []).map((optText, idx) => ({
-                    optionText: optText,
-                    isCorrect: idx === q.correctOptionIndex
-                }))
-            }));
-            
-            showToast(`AI đã tạo ${lastGeneratedQuestions.length} câu hỏi từ file!`, 'success');
-            
-            const status = document.getElementById('aiExamStatus');
-            if (status) status.textContent = `✅ Đã tách ${lastGeneratedQuestions.length} câu từ file. Hãy nhấn "Lưu" để hoàn tất.`;
-        } catch (e) {
-            showToast('Lỗi AI: ' + e.message, 'error');
-        }
-    };
-    reader.readAsDataURL(file);
-}
+// Duplicate definitions of generateQuizWithAI and generateQuizFromFile have been removed as they are unified above.
 
 async function suggestQuestionWithAI() {
     const context = document.getElementById('aiQuestionContext').value.trim();
@@ -4008,6 +4036,295 @@ async function submitBulkDeptUpdate() {
     }
 }
 
+async function loadExamsPageData() {
+    await loadExamsPageList();
+}
 
+async function loadExamsPageList() {
+    try {
+        const prefix = (window.location.pathname.toLowerCase().includes('/it') || window.location.pathname.toLowerCase().includes('/it/')) ? '/api/it' : '/api/hr';
+        const data = await apiFetch(`${prefix}/exams-with-stats`);
+        loadedExamsList = data || [];
+        renderExamsPageList();
+    } catch (e) {
+        showToast('Không tải được danh sách bài thi: ' + e.message, 'error');
+    }
+}
+
+function renderExamsPageList() {
+    const keyword = (document.getElementById('examsSearch')?.value || '').trim().toLowerCase();
+    const tbody = document.getElementById('examsTableBody');
+    if (!tbody) return;
+
+    let filtered = loadedExamsList;
+    if (keyword) {
+        filtered = filtered.filter(e => 
+            String(e.examTitle || '').toLowerCase().includes(keyword) ||
+            String(e.courseTitle || '').toLowerCase().includes(keyword)
+        );
+    }
+
+    tbody.innerHTML = filtered.length ? filtered.map(row => `
+        <tr>
+            <td style="color:#64748b; font-family:monospace">${row.examId}</td>
+            <td><strong>${libraryEscape(row.examTitle)}</strong></td>
+            <td><span class="badge badge-blue">${libraryEscape(row.courseTitle || 'Chưa gán')}</span></td>
+            <td><span class="badge badge-purple">${row.questionsCount || 0} câu</span></td>
+            <td>${row.durationMinutes || 0} phút</td>
+            <td>${row.passScore || 0}%</td>
+            <td><span style="font-weight:700; color:#166534; cursor:pointer;" onclick="openExamParticipants(${row.examId}, 'Đạt')" title="Xem chi tiết Đạt">✔️ ${row.passedCount || 0}</span></td>
+            <td><span style="font-weight:700; color:#991b1b; cursor:pointer;" onclick="openExamParticipants(${row.examId}, 'Không đạt')" title="Xem chi tiết Không đạt">❌ ${row.failedCount || 0}</span></td>
+            <td>
+                <div style="display:flex; gap:8px; justify-content:flex-end">
+                    <button class="btn btn-secondary btn-sm" onclick="openExamParticipants(${row.examId})">Chi tiết</button>
+                    <button class="btn btn-primary btn-sm" onclick="openExamBuilder(${row.examId})">Cấu trúc</button>
+                </div>
+            </td>
+        </tr>
+    `).join('') : '<tr><td colspan="9" style="text-align:center; color:#94a3b8; padding:24px">Không tìm thấy bài thi nào.</td></tr>';
+}
+
+async function openExamBuilder(examId) {
+    builderExamId = examId;
+    document.getElementById('builderExamId').value = examId;
+    
+    const exam = loadedExamsList.find(e => e.examId === examId);
+    document.getElementById('examBuilderTitle').textContent = `Xây dựng cấu trúc bài thi: ${exam ? exam.examTitle : ''}`;
+
+    const prefix = (window.location.pathname.toLowerCase().includes('/it') || window.location.pathname.toLowerCase().includes('/it/')) ? '/api/it' : '/api/hr';
+
+    if (!allQuestionPoolData.length) {
+        try {
+            allQuestionPoolData = await apiFetch(`${prefix}/questions-pool`);
+        } catch (e) {
+            showToast('Không tải được ngân hàng câu hỏi: ' + e.message, 'error');
+        }
+    }
+
+    try {
+        const questions = await apiFetch(`${prefix}/exams/${examId}/questions`);
+        builderActiveExamQuestions = questions.map(q => ({
+            questionId: q.questionId,
+            questionText: q.questionText,
+            questionType: q.questionType || 'MultipleChoice',
+            points: q.points || 10
+        }));
+    } catch (e) {
+        showToast('Không tải được câu hỏi của bài thi: ' + e.message, 'error');
+        builderActiveExamQuestions = [];
+    }
+
+    renderExamBuilderPool();
+    renderExamBuilderStructure();
+    openModal('examBuilderModal');
+}
+
+function renderExamBuilderPool() {
+    const keyword = (document.getElementById('examBuilderPoolSearch')?.value || '').trim().toLowerCase();
+    
+    let filtered = allQuestionPoolData || [];
+    if (keyword) {
+        filtered = filtered.filter(q => String(q.questionText || '').toLowerCase().includes(keyword));
+    }
+
+    // Filter out questions already in exam
+    const activeIds = new Set(builderActiveExamQuestions.map(q => q.questionId));
+    const available = filtered.filter(q => !activeIds.has(q.questionId));
+
+    const mcList = document.getElementById('builderPoolMCList');
+    const essayList = document.getElementById('builderPoolEssayList');
+    const fitbList = document.getElementById('builderPoolFITBList');
+
+    const renderItem = (q) => `
+        <div class="pool-item" draggable="true" ondragstart="handleExamDragStart(event, ${q.questionId}, '${escapeJs(q.questionText)}', '${q.questionType}')" style="padding:10px; margin-bottom:8px; border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; cursor:grab; display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:12px; font-weight:600; color:#334155; flex:1; padding-right:8px; word-break:break-word;">
+                ${libraryEscape(q.questionText)}
+            </div>
+            <button class="btn btn-secondary btn-sm" style="padding:2px 6px; font-size:10px;" onclick="addQuestionToExamStructure(${q.questionId})">➕</button>
+        </div>
+    `;
+
+    if (mcList) mcList.innerHTML = available.filter(q => q.questionType === 'MultipleChoice').map(renderItem).join('') || '<div style="font-size:11px; color:#94a3b8; text-align:center; padding:10px;">Không có câu hỏi trắc nghiệm</div>';
+    if (essayList) essayList.innerHTML = available.filter(q => q.questionType === 'Essay').map(renderItem).join('') || '<div style="font-size:11px; color:#94a3b8; text-align:center; padding:10px;">Không có câu hỏi tự luận</div>';
+    if (fitbList) fitbList.innerHTML = available.filter(q => q.questionType === 'FillInTheBlank').map(renderItem).join('') || '<div style="font-size:11px; color:#94a3b8; text-align:center; padding:10px;">Không có câu hỏi điền từ</div>';
+}
+
+function renderExamBuilderStructure() {
+    const list = document.getElementById('examBuilderStructureList');
+    const emptyMsg = document.getElementById('examBuilderEmptyMessage');
+    
+    if (!list || !emptyMsg) return;
+
+    if (builderActiveExamQuestions.length === 0) {
+        list.innerHTML = '';
+        emptyMsg.style.display = 'block';
+        return;
+    }
+
+    emptyMsg.style.display = 'none';
+    list.innerHTML = builderActiveExamQuestions.map((q, idx) => {
+        let typeBadge = 'badge-blue';
+        let typeLabel = 'Trắc nghiệm';
+        if (q.questionType === 'Essay') { typeBadge = 'badge-purple'; typeLabel = 'Tự luận'; }
+        if (q.questionType === 'FillInTheBlank') { typeBadge = 'badge-orange'; typeLabel = 'Điền từ'; }
+
+        return `
+            <div style="padding:14px; background:#fff; border:1px solid #e2e8f0; border-radius:10px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 2px 4px rgba(0,0,0,0.02)">
+                <div style="flex:1; padding-right:16px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-weight:700; color:#475569; font-family:monospace; font-size:13px;">#${idx+1}</span>
+                        <span class="badge ${typeBadge}" style="font-size:10px; color:white;">${typeLabel}</span>
+                    </div>
+                    <div style="font-weight:600; color:#1e293b; font-size:13px; margin-top:4px;">${libraryEscape(q.questionText)}</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="font-size:11px; font-weight:600; color:#64748b;">Điểm:</span>
+                        <input type="number" class="form-input" style="width:60px; height:28px; padding:2px 6px; font-size:12px; text-align:center;" value="${q.points}" onchange="updateQuestionPoints(${q.questionId}, this.value)">
+                    </div>
+                    <button class="btn btn-danger btn-sm" style="padding:4px 8px; background-color:#fee2e2; color:#ef4444; border:none;" onclick="removeQuestionFromExamStructure(${q.questionId})">Gỡ</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function updateQuestionPoints(questionId, value) {
+    const val = parseFloat(value) || 0;
+    const q = builderActiveExamQuestions.find(x => x.questionId === questionId);
+    if (q) q.points = val;
+}
+
+function removeQuestionFromExamStructure(questionId) {
+    builderActiveExamQuestions = builderActiveExamQuestions.filter(q => q.questionId !== questionId);
+    renderExamBuilderPool();
+    renderExamBuilderStructure();
+}
+
+function addQuestionToExamStructure(questionId) {
+    const qPool = (allQuestionPoolData || []).find(x => x.questionId === questionId);
+    if (!qPool) return;
+
+    builderActiveExamQuestions.push({
+        questionId: qPool.questionId,
+        questionText: qPool.questionText,
+        questionType: qPool.questionType || 'MultipleChoice',
+        points: 10
+    });
+
+    renderExamBuilderPool();
+    renderExamBuilderStructure();
+}
+
+function handleExamDragStart(e, id, text, type) {
+    examDragData = { id, text, type };
+    e.dataTransfer.setData('text/plain', id);
+}
+function handleExamDragOver(e) {
+    e.preventDefault();
+    if(e.currentTarget) e.currentTarget.classList.add('drop-zone-active');
+}
+function handleExamDragLeave(e) {
+    if (e.currentTarget) e.currentTarget.classList.remove('drop-zone-active');
+}
+function handleExamDrop(e) {
+    e.preventDefault();
+    handleExamDragLeave(e);
+    if (!examDragData) return;
+    addQuestionToExamStructure(examDragData.id);
+    examDragData = null;
+}
+
+async function saveExamStructureClick() {
+    if (!builderExamId) return;
+
+    try {
+        const prefix = (window.location.pathname.toLowerCase().includes('/it') || window.location.pathname.toLowerCase().includes('/it/')) ? '/api/it' : '/api/hr';
+        const ids = builderActiveExamQuestions.map(q => q.questionId);
+        await apiFetch(`${prefix}/exams/${builderExamId}/save-structure`, {
+            method: 'POST',
+            body: JSON.stringify(ids)
+        });
+
+        showToast('Lưu cấu trúc đề thi thành công.');
+        closeModal('examBuilderModal');
+        if (typeof loadExamsPageList === 'function') loadExamsPageList();
+    } catch (e) {
+        showToast('Lỗi lưu cấu trúc: ' + e.message, 'danger');
+    }
+}
+
+async function openExamParticipants(examId, initialFilter = '') {
+    const prefix = (window.location.pathname.toLowerCase().includes('/it') || window.location.pathname.toLowerCase().includes('/it/')) ? '/api/it' : '/api/hr';
+    
+    const searchInput = document.getElementById('participantsSearch');
+    const statusFilter = document.getElementById('participantsStatusFilter');
+    if (searchInput) searchInput.value = '';
+    if (statusFilter) statusFilter.value = initialFilter;
+    
+    const exam = loadedExamsList.find(e => e.examId === examId);
+    const modalTitle = document.getElementById('participantsModalTitle');
+    if (modalTitle) modalTitle.textContent = `Kết quả thi: ${exam ? exam.examTitle : ''}`;
+    
+    openModal('examParticipantsModal');
+    
+    try {
+        const data = await apiFetch(`${prefix}/exams/${examId}/participants`);
+        loadedParticipants = data || [];
+        renderParticipantsList();
+    } catch (e) {
+        showToast('Không tải được danh sách kết quả: ' + e.message, 'danger');
+        closeModal('examParticipantsModal');
+    }
+}
+
+function renderParticipantsList() {
+    const searchVal = (document.getElementById('participantsSearch')?.value || '').trim().toLowerCase();
+    const statusVal = document.getElementById('participantsStatusFilter')?.value || '';
+    const tbody = document.getElementById('participantsTableBody');
+    if (!tbody) return;
+    
+    let filtered = loadedParticipants;
+    if (searchVal) {
+        filtered = filtered.filter(p => String(p.fullName || '').toLowerCase().includes(searchVal) || String(p.employeeCode || '').toLowerCase().includes(searchVal));
+    }
+    if (statusVal) {
+        filtered = filtered.filter(p => p.statusText === statusVal);
+    }
+    
+    tbody.innerHTML = filtered.length ? filtered.map(p => {
+        const scoreText = p.score !== null && p.score !== undefined ? `${p.score}%` : '--';
+        const dateText = p.endTime ? fmtDateTime(p.endTime) : '--';
+        
+        let badgeClass = 'badge-secondary';
+        if (p.statusClass === 'success') badgeClass = 'badge-success';
+        if (p.statusClass === 'danger') badgeClass = 'badge-danger';
+        if (p.statusClass === 'warning') badgeClass = 'badge-info';
+
+        return `
+            <tr>
+                <td style="font-family:monospace; color:#64748b">${libraryEscape(p.employeeCode || '--')}</td>
+                <td><strong>${libraryEscape(p.fullName)}</strong></td>
+                <td><span class="badge badge-blue" style="background:#eff6ff; color:#1d4ed8">${libraryEscape(p.departmentName)}</span></td>
+                <td style="font-weight:700">${scoreText}</td>
+                <td><span class="badge ${badgeClass}">${p.statusText}</span></td>
+                <td style="font-size:12px; color:#64748b">${dateText}</td>
+            </tr>`;
+    }).join('') : '<tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:24px">Không có kết quả nào phù hợp.</td></tr>';
+}
+
+function openCreateExamModal() {
+    const eId = document.getElementById('libraryExamId'); if (eId) eId.value = '';
+    const eTitle = document.getElementById('libraryExamTitleInput'); if (eTitle) eTitle.value = '';
+    const eLevel = document.getElementById('libraryExamLevelInput'); if (eLevel) eLevel.value = '';
+    const eDuration = document.getElementById('libraryExamDurationInput'); if (eDuration) eDuration.value = 30;
+    const ePass = document.getElementById('libraryExamPassScoreInput'); if (ePass) ePass.value = 50;
+    const eMax = document.getElementById('libraryExamMaxAttemptsInput'); if (eMax) eMax.value = '';
+    openModal('libraryExamModal');
+}
+
+function escapeJs(value) {
+    return String(value ?? '').replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
 
 document.addEventListener('DOMContentLoaded', init);

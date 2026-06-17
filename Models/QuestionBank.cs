@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -20,6 +20,9 @@ public partial class QuestionBank
 
     [StringLength(50)]
     public string? Difficulty { get; set; }
+
+    [StringLength(50)]
+    public string? QuestionType { get; set; }
 
     [ForeignKey("CategoryId")]
     [InverseProperty("QuestionBanks")]

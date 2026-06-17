@@ -1291,6 +1291,331 @@ public class HRController : Controller
         }
         return str;
     }
+
+    [HttpPost("/api/hr/assignments/{id}/extend")]
+    [HttpPost("/api/hr/extend-assignment")]
+    public async Task<IActionResult> ExtendAssignment(int id, [FromBody] ExtendAssignmentDto dto)
+    {
+        var userId = GetCurrentUserId();
+        if (userId <= 0) return Unauthorized();
+
+        var assignment = await _db.TrainingAssignments.FindAsync(id);
+        if (assignment == null) return NotFound("Không tìm thấy phân công đào tạo.");
+
+        var finalDueDate = dto.NewDueDate ?? dto.DueDate;
+        assignment.DueDate = finalDueDate;
+        
+        var studentId = assignment.UserId;
+        if (studentId.HasValue)
+        {
+            var course = await _db.Courses.FindAsync(assignment.CourseId);
+            var courseTitle = course?.Title ?? "Khóa học";
+            
+            var notification = new Notification
+            {
+                UserId = studentId.Value,
+                Title = $"[GIA HẠN] Khóa học '{courseTitle}' của bạn đã được gia hạn hạn hoàn thành mới là {finalDueDate?.ToString("dd/MM/yyyy HH:mm") ?? "không thời hạn"}.",
+                IsRead = false
+            };
+            _db.Notifications.Add(notification);
+        }
+
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true });
+    }
+
+    [HttpGet("/api/hr/notifications")]
+    public async Task<IActionResult> GetHrNotifications()
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        var userId = GetCurrentUserId();
+        var notifications = await _db.Notifications
+            .Where(n => n.UserId == userId)
+            .OrderByDescending(n => n.Id)
+            .Take(50)
+            .Select(n => new
+            {
+                id = n.Id,
+                title = n.Title,
+                isRead = n.IsRead ?? false
+            })
+            .ToListAsync();
+
+        return Json(notifications);
+    }
+
+    [HttpPost("/api/hr/notifications/{id}/read")]
+    public async Task<IActionResult> MarkHrNotificationRead(int id)
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        var userId = GetCurrentUserId();
+        var notif = await _db.Notifications.FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId);
+        if (notif == null) return NotFound();
+
+        notif.IsRead = true;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("/api/hr/notifications/read-all")]
+    public async Task<IActionResult> MarkAllHrNotificationsRead()
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        var userId = GetCurrentUserId();
+        var unread = await _db.Notifications.Where(n => n.UserId == userId && n.IsRead != true).ToListAsync();
+        foreach (var n in unread)
+        {
+            n.IsRead = true;
+        }
+        await _db.SaveChangesAsync();
+
+        return Ok(new { success = true });
+    }
+
+    [HttpGet("/api/hr/exams-with-stats")]
+    public async Task<IActionResult> GetExamsWithStats()
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        int deptId = GetCurrentDeptId();
+        var currentDept = await _db.Departments.FindAsync(deptId);
+        bool isTrainingCenter = currentDept?.DepartmentName == "Trung tâm Đào tạo Nội bộ";
+
+        var query = _db.Exams.AsQueryable();
+        if (!isTrainingCenter)
+        {
+            query = query.Where(e => e.Course == null 
+                                  || e.Course.IsForAllDepartments == true 
+                                  || e.Course.TargetDepartmentId == null 
+                                  || e.Course.TargetDepartmentId == deptId 
+                                  || e.Course.OwnerDepartmentId == deptId 
+                                  || e.TargetDepartmentId == deptId);
+        }
+
+        var exams = await query
+            .Include(e => e.Course)
+            .Include(e => e.ExamQuestions)
+            .Include(e => e.UserExams)
+            .OrderByDescending(e => e.ExamId)
+            .Select(e => new
+            {
+                examId = e.ExamId,
+                examTitle = e.ExamTitle,
+                durationMinutes = e.DurationMinutes ?? 30,
+                passScore = e.PassScore ?? 50m,
+                maxAttempts = e.MaxAttempts,
+                courseId = e.CourseId,
+                courseTitle = e.Course != null ? e.Course.Title : null,
+                questionsCount = e.ExamQuestions.Count,
+                passedCount = e.UserExams.Count(ue => ue.IsFinish == true && (ue.Score ?? 0) >= (e.PassScore ?? 50m)),
+                failedCount = e.UserExams.Count(ue => ue.IsFinish == true && (ue.Score ?? 0) < (e.PassScore ?? 50m)),
+                startDate = e.StartDate,
+                endDate = e.EndDate,
+                targetDepartmentId = e.TargetDepartmentId,
+                level = e.Level
+            })
+            .ToListAsync();
+
+        return Json(exams);
+    }
+
+    [HttpGet("/api/hr/questions-pool")]
+    public async Task<IActionResult> GetQuestionsPool()
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        var questions = await _db.QuestionBanks
+            .Include(q => q.QuestionOptions)
+            .OrderByDescending(q => q.QuestionId)
+            .Select(q => new
+            {
+                questionId = q.QuestionId,
+                questionText = q.QuestionText,
+                questionType = q.QuestionType ?? "MultipleChoice",
+                difficulty = q.Difficulty ?? "Medium",
+                options = q.QuestionOptions.OrderBy(o => o.OptionId).Select(o => new
+                {
+                    optionId = o.OptionId,
+                    optionText = o.OptionText,
+                    isCorrect = o.IsCorrect ?? false
+                }).ToList()
+            })
+            .ToListAsync();
+
+        return Json(questions);
+    }
+
+    [HttpGet("/api/hr/exams/{examId}/questions")]
+    public async Task<IActionResult> GetExamQuestions(int examId)
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        var questions = await _db.ExamQuestions
+            .Include(eq => eq.Question)
+                .ThenInclude(q => q.QuestionOptions)
+            .Where(eq => eq.ExamId == examId)
+            .Select(eq => new {
+                eq.QuestionId, 
+                eq.Points,
+                eq.Question.QuestionText,
+                Options = eq.Question.QuestionOptions.Select(o => new { o.OptionId, o.OptionText, o.IsCorrect }).ToList()
+            }).ToListAsync();
+
+        return Json(questions);
+    }
+
+    [HttpGet("/api/hr/exams/{examId}/participants")]
+    public async Task<IActionResult> GetExamParticipants(int examId)
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        var exam = await _db.Exams.Include(e => e.Course).FirstOrDefaultAsync(e => e.ExamId == examId);
+        if (exam == null) return NotFound(new { error = "Không tìm thấy bài thi." });
+
+        var courseId = exam.CourseId;
+        
+        var userExams = await _db.UserExams
+            .Include(ue => ue.User)
+                .ThenInclude(u => u.Department)
+            .Where(ue => ue.ExamId == examId)
+            .ToListAsync();
+
+        var enrollments = new List<Enrollment>();
+        if (courseId.HasValue)
+        {
+            enrollments = await _db.Enrollments
+                .Include(e => e.User)
+                    .ThenInclude(u => u.Department)
+                .Where(e => e.CourseId == courseId && e.User != null && e.User.Status == "Active")
+                .ToListAsync();
+        }
+
+        var allUsersMap = new Dictionary<int, User>();
+        foreach (var e in enrollments)
+        {
+            if (e.User != null && !allUsersMap.ContainsKey(e.User.UserId))
+            {
+                allUsersMap[e.User.UserId] = e.User;
+            }
+        }
+        foreach (var ue in userExams)
+        {
+            if (ue.User != null && !allUsersMap.ContainsKey(ue.User.UserId))
+            {
+                allUsersMap[ue.User.UserId] = ue.User;
+            }
+        }
+
+        var passScore = exam.PassScore ?? 50m;
+        var sortedUsers = allUsersMap.Values.OrderBy(u => u.FullName ?? "").ToList();
+        var participants = new List<object>();
+
+        foreach (var user in sortedUsers)
+        {
+            var attempts = userExams.Where(ue => ue.UserId == user.UserId).ToList();
+            
+            string statusText = "Chưa làm";
+            string statusClass = "secondary";
+            decimal? score = null;
+            DateTime? endTime = null;
+
+            if (attempts.Any(a => a.IsFinish == true))
+            {
+                var finishedAttempts = attempts.Where(a => a.IsFinish == true).ToList();
+                var bestAttempt = finishedAttempts.OrderByDescending(a => a.Score).First();
+                score = bestAttempt.Score;
+                endTime = bestAttempt.EndTime;
+
+                if (score >= passScore)
+                {
+                    statusText = "Đạt";
+                    statusClass = "success";
+                }
+                else
+                {
+                    statusText = "Không đạt";
+                    statusClass = "danger";
+                }
+            }
+            else if (attempts.Any())
+            {
+                statusText = "Đang làm";
+                statusClass = "warning";
+            }
+
+            participants.Add(new
+            {
+                employeeCode = user.EmployeeCode,
+                fullName = user.FullName ?? "N/A",
+                departmentName = user.Department?.DepartmentName ?? "N/A",
+                score = score,
+                statusText = statusText,
+                statusClass = statusClass,
+                endTime = endTime
+            });
+        }
+
+        return Json(participants);
+    }
+
+    [HttpPost("/api/hr/exams/{examId}/save-structure")]
+    public async Task<IActionResult> SaveExamStructure(int examId, [FromBody] List<int> questionIds)
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        var exam = await _db.Exams.FindAsync(examId);
+        if (exam == null) return NotFound(new { error = "Không tìm thấy bài thi." });
+
+        try
+        {
+            var strategy = _db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync<IActionResult>(async () =>
+            {
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    var oldLinks = await _db.ExamQuestions.Where(eq => eq.ExamId == examId).ToListAsync();
+                    _db.ExamQuestions.RemoveRange(oldLinks);
+                    await _db.SaveChangesAsync();
+
+                    foreach (var qId in questionIds)
+                    {
+                        _db.ExamQuestions.Add(new ExamQuestion
+                        {
+                            ExamId = examId,
+                            QuestionId = qId,
+                            Points = 10
+                        });
+                    }
+                    await _db.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+                    return Ok(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi lưu cấu trúc bài thi: " + ex.Message });
+        }
+    }
 }
 
 // DTOs
@@ -1397,4 +1722,24 @@ public class HrCreateLessonDto
 public class HrPublishCourseDto
 {
     public bool Publish { get; set; }
+}
+
+public class ExtendAssignmentDto
+{
+    public DateTime? DueDate { get; set; }
+    public DateTime? NewDueDate { get; set; }
+}
+
+public class QuestionPoolItemDto
+{
+    public string QuestionText { get; set; } = "";
+    public string QuestionType { get; set; } = "MultipleChoice";
+    public string Difficulty { get; set; } = "Medium";
+    public List<QuestionPoolOptionDto>? Options { get; set; }
+}
+
+public class QuestionPoolOptionDto
+{
+    public string OptionText { get; set; } = "";
+    public bool IsCorrect { get; set; }
 }

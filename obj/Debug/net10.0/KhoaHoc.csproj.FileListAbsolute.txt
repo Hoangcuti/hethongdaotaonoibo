@@ -393,11 +393,9 @@ D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\scopedcss\Views\Shared\_
 D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\scopedcss\bundle\KhoaHoc.styles.css
 D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\scopedcss\projectbundle\KhoaHoc.bundle.scp.css
 D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\compressed\7baegh7y8f-{0}-is0eghor97-is0eghor97.gz
-D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\compressed\ssxbzhi26z-{0}-8w2pfrf3ii-8w2pfrf3ii.gz
 D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\compressed\4b0hy0d3ap-{0}-b9sayid5wm-b9sayid5wm.gz
 D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\compressed\brv79ndjhd-{0}-61n19gt1b8-61n19gt1b8.gz
 D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\compressed\3ioewmjk3s-{0}-2moe3ifirz-2moe3ifirz.gz
-D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\compressed\ux33wmlru4-{0}-vwnf79jgr3-vwnf79jgr3.gz
 D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\compressed\xunyo3mtzp-{0}-xtxxf3hu2r-xtxxf3hu2r.gz
 D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\compressed\7hln75xazx-{0}-t1cqhe9u97-t1cqhe9u97.gz
 D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\compressed\g3jxkismie-{0}-c2jlpeoesf-c2jlpeoesf.gz
@@ -471,3 +469,5 @@ D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\refint\KhoaHoc.dll
 D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\KhoaHoc.pdb
 D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\KhoaHoc.genruntimeconfig.cache
 D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\ref\KhoaHoc.dll
+D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\compressed\ssxbzhi26z-{0}-xadxxuahvl-xadxxuahvl.gz
+D:\DATN\New folder\hethongdaotaonoibo\obj\Debug\net10.0\compressed\ux33wmlru4-{0}-d8632fa48y-d8632fa48y.gz

@@ -539,25 +539,25 @@ public static class DatabaseSeeder
         // 14. Tạo Đề thi kiểm tra (Exams) gắn với từng module (chương)
 
         // --- Exams HSE101 ---
-        var examHse1 = new Exam { CourseId = courses[0].CourseId, ModuleId = modulesHse[0].ModuleId, ExamTitle = "HSE101 - Trắc nghiệm Chương 1: Quy tắc an toàn & PPE", DurationMinutes = 15, PassScore = 100m, Level = 1, MaxAttempts = 3 };
-        var examHse2 = new Exam { CourseId = courses[0].CourseId, ModuleId = modulesHse[1].ModuleId, ExamTitle = "HSE101 - Trắc nghiệm Chương 2: PCCC & Cứu nạn cứu hộ", DurationMinutes = 15, PassScore = 100m, Level = 1, MaxAttempts = 3 };
-        var examHse3 = new Exam { CourseId = courses[0].CourseId, ModuleId = modulesHse[2].ModuleId, ExamTitle = "HSE101 - Trắc nghiệm Chương 3: An toàn Điện & Hóa chất", DurationMinutes = 20, PassScore = 100m, Level = 1, MaxAttempts = 5 };
+        var examHse1 = new Exam { CourseId = courses[0].CourseId, ModuleId = modulesHse[0].ModuleId, ExamTitle = "HSE101 - Trắc nghiệm Chương 1: Quy tắc an toàn & PPE", DurationMinutes = 15, PassScore = 100m, Level = 1, MaxAttempts = 3, StartDate = DateTime.Now.AddDays(-1), EndDate = DateTime.Now.AddDays(15) };
+        var examHse2 = new Exam { CourseId = courses[0].CourseId, ModuleId = modulesHse[1].ModuleId, ExamTitle = "HSE101 - Trắc nghiệm Chương 2: PCCC & Cứu nạn cứu hộ", DurationMinutes = 15, PassScore = 100m, Level = 1, MaxAttempts = 3, StartDate = DateTime.Now.AddDays(-1), EndDate = DateTime.Now.AddDays(15) };
+        var examHse3 = new Exam { CourseId = courses[0].CourseId, ModuleId = modulesHse[2].ModuleId, ExamTitle = "HSE101 - Trắc nghiệm Chương 3: An toàn Điện & Hóa chất", DurationMinutes = 20, PassScore = 100m, Level = 1, MaxAttempts = 5, StartDate = DateTime.Now.AddDays(-1), EndDate = DateTime.Now.AddDays(15) };
 
         // --- Exams PRO102 ---
-        var examPro1 = new Exam { CourseId = courses[1].CourseId, ModuleId = modulesPro[0].ModuleId, ExamTitle = "PRO102 - Trắc nghiệm Chương 1: Đánh giá tiêu chuẩn 5S", DurationMinutes = 10, PassScore = 100m, Level = 1, MaxAttempts = 3 };
-        var examPro2 = new Exam { CourseId = courses[1].CourseId, ModuleId = modulesPro[1].ModuleId, ExamTitle = "PRO102 - Trắc nghiệm Chương 2: Vận hành máy & Sự cố", DurationMinutes = 10, PassScore = 100m, Level = 1, MaxAttempts = 3 };
+        var examPro1 = new Exam { CourseId = courses[1].CourseId, ModuleId = modulesPro[0].ModuleId, ExamTitle = "PRO102 - Trắc nghiệm Chương 1: Đánh giá tiêu chuẩn 5S", DurationMinutes = 10, PassScore = 100m, Level = 1, MaxAttempts = 3, StartDate = DateTime.Now.AddDays(-1), EndDate = DateTime.Now.AddDays(15) };
+        var examPro2 = new Exam { CourseId = courses[1].CourseId, ModuleId = modulesPro[1].ModuleId, ExamTitle = "PRO102 - Trắc nghiệm Chương 2: Vận hành máy & Sự cố", DurationMinutes = 10, PassScore = 100m, Level = 1, MaxAttempts = 3, StartDate = DateTime.Now.AddDays(-1), EndDate = DateTime.Now.AddDays(15) };
 
         // --- Exams ITSEC101 ---
-        var examItSec1 = new Exam { CourseId = courses[2].CourseId, ModuleId = modulesItSec[0].ModuleId, ExamTitle = "ITSEC101 - Trắc nghiệm Chương 1: Bảo mật tài khoản", DurationMinutes = 10, PassScore = 100m, Level = 1, MaxAttempts = 3 };
-        var examItSec2 = new Exam { CourseId = courses[2].CourseId, ModuleId = modulesItSec[1].ModuleId, ExamTitle = "ITSEC101 - Trắc nghiệm Chương 2: Phòng chống Phishing", DurationMinutes = 15, PassScore = 100m, Level = 1, MaxAttempts = 3 };
+        var examItSec1 = new Exam { CourseId = courses[2].CourseId, ModuleId = modulesItSec[0].ModuleId, ExamTitle = "ITSEC101 - Trắc nghiệm Chương 1: Bảo mật tài khoản", DurationMinutes = 10, PassScore = 100m, Level = 1, MaxAttempts = 3, StartDate = DateTime.Now.AddDays(-1), EndDate = DateTime.Now.AddDays(15) };
+        var examItSec2 = new Exam { CourseId = courses[2].CourseId, ModuleId = modulesItSec[1].ModuleId, ExamTitle = "ITSEC101 - Trắc nghiệm Chương 2: Phòng chống Phishing", DurationMinutes = 15, PassScore = 100m, Level = 1, MaxAttempts = 3, StartDate = DateTime.Now.AddDays(-1), EndDate = DateTime.Now.AddDays(15) };
 
         // --- Exams SALES201 ---
-        var examSales1 = new Exam { CourseId = courses[3].CourseId, ModuleId = modulesSales[0].ModuleId, ExamTitle = "SALES201 - Trắc nghiệm Chương 1: Tìm kiếm & Tiếp cận", DurationMinutes = 10, PassScore = 80m, Level = 2, MaxAttempts = 3 };
-        var examSales2 = new Exam { CourseId = courses[3].CourseId, ModuleId = modulesSales[1].ModuleId, ExamTitle = "SALES201 - Trắc nghiệm Chương 2: Xử lý từ chối", DurationMinutes = 15, PassScore = 80m, Level = 2, MaxAttempts = 3 };
+        var examSales1 = new Exam { CourseId = courses[3].CourseId, ModuleId = modulesSales[0].ModuleId, ExamTitle = "SALES201 - Trắc nghiệm Chương 1: Tìm kiếm & Tiếp cận", DurationMinutes = 10, PassScore = 80m, Level = 2, MaxAttempts = 3, StartDate = DateTime.Now.AddDays(-1), EndDate = DateTime.Now.AddDays(15) };
+        var examSales2 = new Exam { CourseId = courses[3].CourseId, ModuleId = modulesSales[1].ModuleId, ExamTitle = "SALES201 - Trắc nghiệm Chương 2: Xử lý từ chối", DurationMinutes = 15, PassScore = 80m, Level = 2, MaxAttempts = 3, StartDate = DateTime.Now.AddDays(-1), EndDate = DateTime.Now.AddDays(15) };
 
         // --- Exams FIN201 ---
-        var examFin1 = new Exam { CourseId = courses[4].CourseId, ModuleId = modulesFin[0].ModuleId, ExamTitle = "FIN201 - Trắc nghiệm Chương 1: Hóa đơn & Chứng từ", DurationMinutes = 10, PassScore = 100m, Level = 1, MaxAttempts = 3 };
-        var examFin2 = new Exam { CourseId = courses[4].CourseId, ModuleId = modulesFin[1].ModuleId, ExamTitle = "FIN201 - Trắc nghiệm Chương 2: Tạm ứng & Quyết toán", DurationMinutes = 10, PassScore = 100m, Level = 1, MaxAttempts = 3 };
+        var examFin1 = new Exam { CourseId = courses[4].CourseId, ModuleId = modulesFin[0].ModuleId, ExamTitle = "FIN201 - Trắc nghiệm Chương 1: Hóa đơn & Chứng từ", DurationMinutes = 10, PassScore = 100m, Level = 1, MaxAttempts = 3, StartDate = DateTime.Now.AddDays(-1), EndDate = DateTime.Now.AddDays(15) };
+        var examFin2 = new Exam { CourseId = courses[4].CourseId, ModuleId = modulesFin[1].ModuleId, ExamTitle = "FIN201 - Trắc nghiệm Chương 2: Tạm ứng & Quyết toán", DurationMinutes = 10, PassScore = 100m, Level = 1, MaxAttempts = 3, StartDate = DateTime.Now.AddDays(-1), EndDate = DateTime.Now.AddDays(15) };
 
         var allExams = new List<Exam> { examHse1, examHse2, examHse3, examPro1, examPro2, examItSec1, examItSec2, examSales1, examSales2, examFin1, examFin2 };
         context.Exams.AddRange(allExams);
@@ -798,6 +798,110 @@ public static class DatabaseSeeder
             new() { UserId = workerCuong.UserId, LessonId = lessons[0].LessonId, Status = "Completed" },
             new() { UserId = workerCuong.UserId, LessonId = lessons[1].LessonId, Status = "Completed" }
         );
+
+        // 17. Gieo Lộ trình học mẫu (Learning Paths)
+        var pathTech = new LearningPath
+        {
+            PathName = "Lộ trình Kỹ thuật & Sản xuất Cơ bản",
+            Description = "Lộ trình đào tạo cơ bản bắt buộc dành riêng cho nhân sự phòng Kỹ thuật & Sản xuất bao gồm các khóa học về An toàn lao động, Quy trình 5S và vận hành máy móc.",
+            CreatedByDeptId = workerCuong.DepartmentId
+        };
+        var pathSecurity = new LearningPath
+        {
+            PathName = "Lộ trình An toàn thông tin & Kỹ năng văn phòng",
+            Description = "Lộ trình nâng cao nhận thức bảo mật hệ thống và quy chế làm việc nội bộ.",
+            CreatedByDeptId = workerCuong.DepartmentId
+        };
+        context.LearningPaths.AddRange(pathTech, pathSecurity);
+        await context.SaveChangesAsync();
+
+        // Gán Khóa học vào Lộ trình (PathCourses)
+        context.PathCourses.AddRange(
+            new PathCourse { PathId = pathTech.PathId, CourseId = courses[0].CourseId, StepOrder = 1 },
+            new PathCourse { PathId = pathTech.PathId, CourseId = courses[1].CourseId, StepOrder = 2 },
+            new PathCourse { PathId = pathSecurity.PathId, CourseId = courses[2].CourseId, StepOrder = 1 },
+            new PathCourse { PathId = pathSecurity.PathId, CourseId = courses[4].CourseId, StepOrder = 2 }
+        );
+
+        // Gieo tiến độ Lộ trình cho Cường (Đang học lộ trình Kỹ thuật đạt 50%)
+        var pathProgress = new UserPathProgress
+        {
+            UserId = workerCuong.UserId,
+            PathId = pathTech.PathId,
+            Status = "InProgress",
+            PercentComplete = 50
+        };
+        context.UserPathProgresses.Add(pathProgress);
+
+        // 18. Gieo Lịch học tập offline mẫu (OfflineTrainingEvents)
+        var offlineEvent1 = new OfflineTrainingEvent
+        {
+            CourseId = courses[0].CourseId,
+            Title = "Huấn luyện thực hành Phòng cháy chữa cháy & Cứu hộ cứu nạn 2026",
+            Location = "Sân trước Nhà máy A",
+            Instructor = "Phạm Văn Máy",
+            StartTime = DateTime.Now.AddDays(2).Date.AddHours(9), // 9:00 AM 2 ngày tới
+            EndTime = DateTime.Now.AddDays(2).Date.AddHours(11), // 11:00 AM
+            DepartmentId = workerCuong.DepartmentId,
+            Shift = "Ca Sáng",
+            Session = "Offline",
+            Status = "Active",
+            Notes = "Yêu cầu mặc trang phục bảo hộ đầy đủ.",
+            CreatedAt = DateTime.Now,
+            CreatedBy = managerTech.UserId,
+            AttendanceStartTime = DateTime.Now.AddDays(2).Date.AddHours(8).AddMinutes(30),
+            AttendanceEndTime = DateTime.Now.AddDays(2).Date.AddHours(9).AddMinutes(30)
+        };
+        
+        var offlineEvent2 = new OfflineTrainingEvent
+        {
+            CourseId = courses[1].CourseId,
+            Title = "Đánh giá thực hành Quy trình 5S tại dây chuyền sản xuất",
+            Location = "Xưởng sản xuất số 2",
+            Instructor = "Phạm Văn Máy",
+            StartTime = DateTime.Now.AddDays(4).Date.AddHours(14), // 2:00 PM 4 ngày tới
+            EndTime = DateTime.Now.AddDays(4).Date.AddHours(16), // 4:00 PM
+            DepartmentId = workerCuong.DepartmentId,
+            Shift = "Ca Chiều",
+            Session = "Offline",
+            Status = "Active",
+            Notes = "Đánh giá xếp loại 5S định kỳ.",
+            CreatedAt = DateTime.Now,
+            CreatedBy = managerTech.UserId,
+            AttendanceStartTime = DateTime.Now.AddDays(4).Date.AddHours(13).AddMinutes(30),
+            AttendanceEndTime = DateTime.Now.AddDays(4).Date.AddHours(14).AddMinutes(30)
+        };
+        context.OfflineTrainingEvents.AddRange(offlineEvent1, offlineEvent2);
+
+        // 19. Gieo FAQs mẫu
+        var faqs = new List<Faq>
+        {
+            new()
+            {
+                Question = "Làm thế nào để đổi mật khẩu cá nhân?",
+                Answer = "Bạn có thể đổi mật khẩu bằng cách truy cập vào trang cá nhân (Profile) từ góc trên bên phải, kéo xuống phần 'Đổi mật khẩu', nhập mật khẩu cũ, mật khẩu mới và nhấn 'Lưu'.",
+                CategoryId = categories.First(c => c.CategoryName == "Kỹ năng Mềm & Phát triển Bản thân").CategoryId
+            },
+            new()
+            {
+                Question = "Tôi phải làm gì nếu gặp sự cố khi đang học bài giảng video?",
+                Answer = "Hãy kiểm tra lại kết nối mạng của bạn. Nếu video vẫn không tải được, vui lòng liên hệ bộ phận IT Support qua hotline nội bộ hoặc tạo yêu cầu hỗ trợ trực tiếp trên hệ thống.",
+                CategoryId = categories.First(c => c.CategoryName == "Công nghệ & Bảo mật").CategoryId
+            },
+            new()
+            {
+                Question = "Thời hạn tối đa để nộp hồ sơ thanh toán tạm ứng là bao lâu?",
+                Answer = "Theo quy trình tài chính, nhân viên phải hoàn tất thủ tục hoàn ứng và nộp đầy đủ hóa đơn chứng từ hợp lệ trong vòng tối đa 5 ngày làm việc kể từ ngày kết thúc công tác.",
+                CategoryId = categories.First(c => c.CategoryName == "Tài chính & Quy trình").CategoryId
+            },
+            new()
+            {
+                Question = "Làm sao để đăng ký tham gia các lớp học Offline?",
+                Answer = "Bạn hãy truy cập vào mục 'Đào tạo offline' trên thanh menu bên trái, tìm kiếm lớp học phù hợp và nhấn vào nút 'Đăng ký'. Hệ thống sẽ tự động gửi email xác nhận và thông báo lịch học đến bạn.",
+                CategoryId = categories.First(c => c.CategoryName == "Kỹ năng Mềm & Phát triển Bản thân").CategoryId
+            }
+        };
+        context.Faqs.AddRange(faqs);
 
         await context.SaveChangesAsync();
     }

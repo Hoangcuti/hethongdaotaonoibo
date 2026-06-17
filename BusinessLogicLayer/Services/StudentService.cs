@@ -36,7 +36,7 @@ public class StudentService : IStudentService
     {
         return query.Where(c =>
             c.Status != null &&
-            VisibleCourseStatuses.Contains(c.Status) &&
+            (c.Status == "Published" || c.Status == "Active") &&
             (
                 c.Enrollments.Any(e => e.UserId == userId) ||
                 c.TrainingAssignments.Any(ta => ta.UserId == userId) ||
@@ -67,6 +67,7 @@ public class StudentService : IStudentService
             {
                 courseId = e.CourseId,
                 title = e.Course?.Title ?? "N/A",
+                enrollDate = e.EnrollDate,
                 progress = e.ProgressPercent ?? 0,
                 status = e.Status
             })

@@ -188,5 +188,11 @@ WHERE NOT EXISTS (
     FROM dbo.Permissions p
     WHERE p.PermissionKey = s.PermissionKey
 );
+
+IF COL_LENGTH('dbo.QuestionBank', 'QuestionType') IS NULL
+    ALTER TABLE dbo.QuestionBank ADD QuestionType NVARCHAR(50) NULL;
+
+IF COL_LENGTH('dbo.UserAnswers', 'TextResponse') IS NULL
+    ALTER TABLE dbo.UserAnswers ADD TextResponse NVARCHAR(MAX) NULL;
 """;
 }

@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ClosedXML.Excel;
@@ -36,32 +36,64 @@ public partial class ITController : Controller
         if (auth != null) return auth;
 
         var totalUsers = await _db.Users.CountAsync();
-        var activeUsers = await _db.Users.CountAsync(u => u.Status == "Active");
         var totalDepartments = await _db.Departments.CountAsync();
-        
-        var userRoleDist = await _db.Roles
-            .AsNoTracking()
-            .Select(r => new
-            {
-                role = r.RoleName ?? "Chưa gán role",
-                count = r.Users.Count()
-            })
-            .Where(x => x.count > 0)
-            .OrderByDescending(x => x.count)
-            .ToDictionaryAsync(x => x.role, x => x.count);
+        var totalCourses = await _db.Courses.CountAsync();
+        var totalExams = await _db.Exams.CountAsync();
 
-        if (!userRoleDist.Any())
+        // 1. Tỷ lệ hoàn thành khóa học chung (Course Completion Distribution)
+        var totalEnrollments = await _db.Enrollments.CountAsync();
+        var completedEnrollments = await _db.Enrollments.CountAsync(e => e.ProgressPercent == 100 || e.Status == "Completed");
+        var inProgressEnrollments = await _db.Enrollments.CountAsync(e => e.ProgressPercent > 0 && e.ProgressPercent < 100 && e.Status != "Completed");
+        var notStartedEnrollments = totalEnrollments - completedEnrollments - inProgressEnrollments;
+
+        var studyDist = new Dictionary<string, int>
         {
-            userRoleDist["IT Admin"] = await _db.Users.CountAsync(u => u.IsItadmin == true);
-            userRoleDist["Học viên"] = await _db.Users.CountAsync(u => u.IsItadmin != true);
-        }
+            { "Hoàn thành", completedEnrollments },
+            { "Đang học", inProgressEnrollments },
+            { "Chưa học", notStartedEnrollments >= 0 ? notStartedEnrollments : 0 }
+        };
+
+        // 2. Bảng xếp hạng học tập theo phòng ban (Department Leaderboard)
+        var dbDepts = await _db.Departments.AsNoTracking().ToListAsync();
+        var dbUsers = await _db.Users
+            .AsNoTracking()
+            .Select(u => new
+            {
+                u.UserId,
+                u.DepartmentId,
+                Enrollments = u.Enrollments.Select(e => new { e.ProgressPercent, e.Status }).ToList()
+            })
+            .ToListAsync();
+
+        var departments = dbDepts.Select(d =>
+        {
+            var deptUsers = dbUsers.Where(u => u.DepartmentId == d.DepartmentId).ToList();
+            var deptEnrollments = deptUsers.SelectMany(u => u.Enrollments).ToList();
+            var enrollmentCount = deptEnrollments.Count;
+            var completedCount = deptEnrollments.Count(e => e.ProgressPercent == 100 || e.Status == "Completed");
+            var avgProgress = enrollmentCount > 0 ? deptEnrollments.Average(e => e.ProgressPercent ?? 0) : 0.0;
+
+            return new
+            {
+                d.DepartmentId,
+                DepartmentName = d.DepartmentName ?? "Phòng ban ẩn",
+                UserCount = deptUsers.Count,
+                EnrollmentCount = enrollmentCount,
+                CompletedCount = completedCount,
+                AvgProgress = avgProgress
+            };
+        })
+        .OrderByDescending(x => x.AvgProgress)
+        .ToList();
 
         return Json(new
         {
             totalUsers,
-            activeUsers,
             totalDepartments,
-            userRoleDist
+            totalCourses,
+            totalExams,
+            studyDist,
+            departments
         });
     }
     [HttpGet("/api/it/settings")]
@@ -183,42 +215,40 @@ public partial class ITController : Controller
         if (auth != null) return Json(new { error = "Unauthorized" });
 
         var backup = await _db.BackupLogs.FindAsync(id);
-        if (backup == null || string.IsNullOrEmpty(backup.FileName)) return NotFound(new { error = "Không tìm thấy bản backup hoặc tên file trống" });
+        if (backup == null || string.IsNullOrEmpty(backup.FileName))
+            return NotFound(new { error = "Không tìm thấy bản backup hoặc tên file trống" });
 
-        // Ensure file name matches .sql or keep original
         var downloadFileName = backup.FileName;
         if (downloadFileName.EndsWith(".bak", StringComparison.OrdinalIgnoreCase))
-        {
             downloadFileName = Path.ChangeExtension(downloadFileName, ".sql");
-        }
 
         var backupDir = Path.Combine(_env.WebRootPath ?? "wwwroot", "backups");
         var filePath = Path.Combine(backupDir, backup.FileName);
 
-        if (!System.IO.File.Exists(filePath))
-        {
-            try
-            {
-                if (!Directory.Exists(backupDir))
-                {
-                    Directory.CreateDirectory(backupDir);
-                }
-                var sqlContent = await GenerateSqlDumpAsync();
-                await System.IO.File.WriteAllTextAsync(filePath, sqlContent, Encoding.UTF8);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error regenerating backup file on the fly: " + backup.FileName);
-            }
-        }
-
+        // Nếu file đã tồn tại thì trả về ngay
         if (System.IO.File.Exists(filePath))
         {
             var bytes = await System.IO.File.ReadAllBytesAsync(filePath);
             return File(bytes, "text/plain", downloadFileName);
         }
 
-        return NotFound(new { error = "Không thể sinh hoặc tìm thấy file backup vật lý" });
+        // File chưa tồn tại: tạo mới (thường xảy ra với các bản backup cũ)
+        try
+        {
+            if (!Directory.Exists(backupDir))
+                Directory.CreateDirectory(backupDir);
+
+            var sqlContent = await GenerateSqlDumpAsync();
+            await System.IO.File.WriteAllTextAsync(filePath, sqlContent, Encoding.UTF8);
+
+            var bytes = await System.IO.File.ReadAllBytesAsync(filePath);
+            return File(bytes, "text/plain", downloadFileName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating backup file on demand: " + backup.FileName);
+            return StatusCode(500, new { error = "Không thể tạo file backup: " + ex.Message });
+        }
     }
     [HttpDelete("/api/it/backuplogs/{id}")]
     public async Task<IActionResult> DeleteBackup(int id)
