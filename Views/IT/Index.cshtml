@@ -18,6 +18,14 @@
         .level-1 { background: #dcfce7; color: #166534; }
         .level-2 { background: #fef9c3; color: #854d0e; }
         .level-3 { background: #fee2e2; color: #991b1b; }
+
+        /* Course cards (matching HR) */
+        .course-list-item { display: flex; align-items: center; gap: 14px; padding: 14px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 10px; transition: border-color .2s; }
+        .course-list-item:hover { border-color: #3b82f6; }
+        .course-icon-box { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+        .course-list-info { flex: 1; }
+        .course-list-title { font-weight: 600; font-size: 14px; }
+        .course-list-meta { font-size: 12px; color: #64748b; margin-top: 3px; }
     </style>
 }
 
@@ -106,26 +114,8 @@
                 <button class="btn btn-primary" onclick="openCreateCourseModal()">➕ Thêm Khóa Học</button>
             </div>
         </div>
-        <div class="card">
-            <div class="table-wrapper">
-                <table class="lms-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Mã KH</th>
-                            <th>Tên khóa học</th>
-                            <th>Level</th>
-                            <th>Danh mục</th>
-                            <th>Bắt buộc</th>
-                            <th>Trạng thái</th>
-                            <th>Thao tác</th>
-                        </tr>
-                    </thead>
-                    <tbody id="itCoursesTable">
-                        <tr><td colspan="8"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
-                    </tbody>
-                </table>
-            </div>
+        <div id="itCoursesContainer" class="course-list-container" style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="loading-overlay"><div class="spinner"></div></div>
         </div>
     </div>
 
@@ -234,14 +224,14 @@
             <div class="card-header" style="border-bottom:none; padding-bottom:6px">
                 <div>
                     <div class="card-title">📚 Kho tài liệu hệ thống</div>
-                    <div class="card-subtitle">Quản lý kho chương, bài giảng và quiz trong toàn hệ thống.</div>
+                    <div class="card-subtitle">Quản lý kho chương, bài học và quiz trong toàn hệ thống.</div>
                 </div>
             </div>
             <div class="card-body" style="padding-top:0">
                 <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between">
                     <div style="display:flex;gap:10px;flex-wrap:wrap">
                         <button id="libraryTabModules" class="btn btn-primary" onclick="switchLibraryTab('modules')">🧩 Kho Chương</button>
-                        <button id="libraryTabLessons" class="btn btn-secondary" onclick="switchLibraryTab('lessons')">📝 Kho Bài Giảng</button>
+                        <button id="libraryTabLessons" class="btn btn-secondary" onclick="switchLibraryTab('lessons')">📝 Kho Bài Học</button>
                         <button id="libraryTabExams" class="btn btn-secondary" onclick="switchLibraryTab('exams')">❓ Kho Quiz</button>
                         <button id="libraryTabQuestions" class="btn btn-secondary" onclick="switchLibraryTab('questions')">❓ Kho Câu Hỏi</button>
                     </div>
@@ -262,7 +252,7 @@
                 <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
                     <div class="input-wrap" style="flex:1;min-width:240px">
                         <span class="input-icon">🔍</span>
-                        <input id="librarySearch" type="text" class="form-input with-icon" placeholder="Tìm theo tên chương, bài giảng, quiz hoặc khóa học..." oninput="renderDocumentLibrary()">
+                        <input id="librarySearch" type="text" class="form-input with-icon" placeholder="Tìm theo tên chương, bài học, quiz hoặc khóa học..." oninput="renderDocumentLibrary()">
                     </div>
                     <select id="libraryDeptFilter" class="form-input" style="width:220px" onchange="renderDocumentLibrary()">
                         <option value="">Tất cả phòng ban</option>
@@ -283,7 +273,7 @@
             <div class="stat-card green">
                 <div class="stat-icon green">📝</div>
                 <div class="stat-value" id="libraryLessonsCount">0</div>
-                <div class="stat-label">Tổng số bài giảng</div>
+                <div class="stat-label">Tổng số bài học</div>
             </div>
             <div class="stat-card cyan">
                 <div class="stat-icon cyan">📎</div>
@@ -361,7 +351,7 @@
             <div class="card-header">
                 <div>
                     <div class="card-title">⚖️ Phê duyệt tài liệu đào tạo</div>
-                    <div class="card-subtitle">Xem xét và phê duyệt các tài liệu (Chương, Bài giảng, Quiz) do Giảng viên/Manager gửi lên.</div>
+                    <div class="card-subtitle">Xem xét và phê duyệt các tài liệu (Chương, Bài học, Quiz) do Giảng viên/Manager gửi lên.</div>
                 </div>
             </div>
             <div class="card-body" style="padding: 14px 20px; border-top: 1px solid #e2e8f0;">
@@ -820,10 +810,16 @@
         <div class="modal-header"><div class="modal-title" id="courseModalTitle">Tạo khóa học</div><button class="modal-close" onclick="closeModal('courseModal')">✖</button></div>
         <div class="modal-body">
             <div style="margin-bottom: 20px; padding: 16px; background: rgba(139,92,246,0.05); border: 1px dashed rgba(139,92,246,0.5); border-radius: 8px;">
-                <label class="form-label" style="color: #7c3aed;">🚀 Tạo tự động bằng AI</label>
-                <div style="display: flex; gap: 8px;">
+                <label class="form-label" style="color: #7c3aed;">🚀 Tạo tự động bằng AI (Prompt)</label>
+                <div style="display: flex; gap: 8px; margin-bottom: 12px;">
                     <input type="text" id="aiPrompt" class="form-input" placeholder="VD: Kỹ năng Telesale...">
                     <button class="btn btn-primary" style="background: linear-gradient(135deg, #8b5cf6, #6366f1); border:none;" onclick="generateWithAI()" id="btnGenerateAI">🚀 Tạo</button>
+                </div>
+                <hr style="border: 0; border-top: 1px dashed rgba(139,92,246,0.3); margin: 12px 0;">
+                <label class="form-label" style="color: #7c3aed;">📘 Tạo tự động từ file Word (.docx)</label>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <input type="file" id="aiCourseWordFile" accept=".docx" class="form-input" style="padding: 4px; background: #fff;">
+                    <button class="btn btn-info" style="white-space: nowrap; background: #2563eb; color: #fff; border: none;" onclick="importCourseFromWordAI()" id="btnImportWordAI">🤖 Nhập AI</button>
                 </div>
             </div>
             <input type="hidden" id="courseModalId">
@@ -958,7 +954,7 @@
                     <!-- Board 2: Lessons -->
                     <div style="background:#fff; display:flex; flex-direction:column; overflow:hidden;">
                         <div style="padding:8px 12px; background:#f0fdf4; color:#15803d; font-weight:600; font-size:12px;">
-                            <span>Kho bài giảng</span>
+                            <span>Kho bài học</span>
                         </div>
                         <div style="flex:1; overflow-y:auto; padding:8px;" id="libLessonsList"></div>
                     </div>
@@ -985,7 +981,7 @@
                     <div id="builderEmptyMessage" style="text-align:center; padding:60px; border:3px dashed #cbd5e1; border-radius:12px; color:#94a3b8; margin-top:20px;">
                         <div style="font-size:40px; margin-bottom:15px;">📥</div>
                         <div style="font-weight:600; font-size:16px;">Khóa học này chưa có nội dung</div>
-                        <div style="font-size:13px;">Hãy kéo Chương, Bài giảng hoặc Quiz từ thư viện bên trái vào đây</div>
+                        <div style="font-size:13px;">Hãy kéo Chương, Bài học hoặc Quiz từ thư viện bên trái vào đây</div>
                     </div>
                 </div>
             </div>
@@ -1191,13 +1187,13 @@
             
             <!-- Source Selection Tabs -->
             <div style="display: flex; gap: 4px; margin-bottom: 20px; background: rgba(15,23,42,0.05); padding: 4px; border-radius: 8px;">
-                <button type="button" class="btn btn-sm lesson-source-tab active" data-source="video" onclick="switchLessonSource('video', 'lesson')" style="flex: 1; border:none; border-radius: 6px; padding: 8px;">🎥 Video bài giảng</button>
+                <button type="button" class="btn btn-sm lesson-source-tab active" data-source="video" onclick="switchLessonSource('video', 'lesson')" style="flex: 1; border:none; border-radius: 6px; padding: 8px;">🎥 Video bài học</button>
                 <button type="button" class="btn btn-sm lesson-source-tab" data-source="ai" onclick="switchLessonSource('ai', 'lesson')" style="flex: 1; border:none; border-radius: 6px; background:transparent; color:#64748b; padding: 8px;">✨ AI / Văn bản</button>
             </div>
 
             <div id="lessonSourceVideo" class="lesson-source-section">
                 <div class="form-group">
-                    <label>Tải Video bài giảng (.mp4, .mov...) *</label>
+                    <label>Tải Video bài học (.mp4, .mov...) *</label>
                     <input id="lessonVideoFileInput" type="file" class="form-input" style="padding:10px" accept="video/*">
                     <div style="margin:8px 0; text-align:center; color:#94a3b8; font-size:12px;">hoặc</div>
                     <input id="lessonVideoLinkInput" type="text" class="form-input" placeholder="Dán link video Youtube / MP4 trực tiếp">
@@ -1218,7 +1214,7 @@
 
             <div id="lessonSourceAI" class="lesson-source-section" style="display:none">
                 <div style="margin-bottom: 15px; padding: 12px; background: rgba(16,185,129,0.05); border: 1px dashed rgba(16,185,129,0.3); border-radius: 8px;">
-                    <label class="form-label" style="color: #10b981; font-size:12px;">💡 Soạn bài giảng bằng AI</label>
+                    <label class="form-label" style="color: #10b981; font-size:12px;">💡 Soạn bài học bằng AI</label>
                     <div style="display: flex; gap: 8px;">
                         <input type="text" id="aiLessonPrompt" class="form-input" style="height: 38px;" placeholder="Nhập chủ đề cần soạn...">
                         <button type="button" class="btn btn-primary" style="background: #10b981; border:none; height: 38px; white-space:nowrap" onclick="generateLessonWithAI('lesson')" id="btnGenerateLessonAI">Soạn thảo</button>
@@ -1252,6 +1248,11 @@
                     <div style="display: flex; gap: 8px; align-items: center; border-top: 1px solid #fed7aa; padding-top: 10px; margin-top: 5px;">
                         <input type="file" id="examFileAI" class="form-input" style="padding: 5px; font-size: 12px; flex: 1;">
                         <button class="btn btn-secondary" style="height: 38px; white-space: nowrap;" onclick="generateQuizFromFile('exam')">🚀 Tạo từ File</button>
+                    </div>
+                    <div style="font-size:11px; margin-top:3px; color:#475569; display: flex; gap: 8px; align-items: center;">
+                        <span>📥 Tải file mẫu AI:</span>
+                        <a href="/uploads/TracNghiem_Mau.xlsx" style="background:#22c55e; color:#fff; text-decoration:none; padding:3px 6px; border-radius:4px; font-weight:600; font-size:10px;" download>📊 Excel Mẫu</a>
+                        <a href="/uploads/TracNghiem_Mau.docx" style="background:#3b82f6; color:#fff; text-decoration:none; padding:3px 6px; border-radius:4px; font-weight:600; font-size:10px;" download>📝 Word Mẫu</a>
                     </div>
                 </div>
                 <div id="aiExamStatus" style="font-size:11px; margin-top:6px; color:#64748b"></div>
@@ -1362,7 +1363,7 @@
             
             <!-- Source Selection Tabs -->
             <div style="display: flex; gap: 4px; margin-bottom: 20px; background: rgba(15,23,42,0.05); padding: 4px; border-radius: 8px;">
-                <button type="button" class="btn btn-sm edit-lesson-source-tab active" data-source="video" onclick="switchLessonSource('video', 'edit')" style="flex: 1; border:none; border-radius: 6px; padding: 8px;">🎥 Video bài giảng</button>
+                <button type="button" class="btn btn-sm edit-lesson-source-tab active" data-source="video" onclick="switchLessonSource('video', 'edit')" style="flex: 1; border:none; border-radius: 6px; padding: 8px;">🎥 Video bài học</button>
                 <button type="button" class="btn btn-sm edit-lesson-source-tab" data-source="ai" onclick="switchLessonSource('ai', 'edit')" style="flex: 1; border:none; border-radius: 6px; background:transparent; color:#64748b; padding: 8px;">✨ AI / Văn bản</button>
             </div>
 
@@ -1465,7 +1466,7 @@
 <!-- Document Library Create Lesson Modal -->
 <div class="modal-backdrop" style="z-index:1260" id="libraryLessonModal">
     <div class="modal-box">
-        <div class="modal-header"><div class="modal-title">Tạo Bài Giảng Mới</div><button class="modal-close" onclick="closeModal('libraryLessonModal')">✖</button></div>
+        <div class="modal-header"><div class="modal-title">Tạo Bài Học Mới</div><button class="modal-close" onclick="closeModal('libraryLessonModal')">✖</button></div>
         <div class="modal-body">
             <input type="hidden" id="libraryLessonId">
             <div class="form-group"><label>Chương *</label><select id="libraryLessonModuleInput" class="form-input"></select></div>
@@ -1476,7 +1477,7 @@
 
             <!-- Source Selection Tabs -->
             <div style="display: flex; gap: 4px; margin-bottom: 20px; background: rgba(15,23,42,0.05); padding: 4px; border-radius: 8px;">
-                <button type="button" class="btn btn-sm library-lesson-source-tab active" data-source="video" onclick="switchLessonSource('video', 'library')" style="flex: 1; border:none; border-radius: 6px; padding: 8px;">🎥 Video bài giảng</button>
+                <button type="button" class="btn btn-sm library-lesson-source-tab active" data-source="video" onclick="switchLessonSource('video', 'library')" style="flex: 1; border:none; border-radius: 6px; padding: 8px;">🎥 Video bài học</button>
                 <button type="button" class="btn btn-sm library-lesson-source-tab" data-source="ai" onclick="switchLessonSource('ai', 'library')" style="flex: 1; border:none; border-radius: 6px; background:transparent; color:#64748b; padding: 8px;">✨ AI / Văn bản</button>
             </div>
 
@@ -1502,7 +1503,7 @@
 
             <div id="libraryLessonSourceAI" class="library-lesson-source-section" style="display:none">
                 <div style="margin-bottom: 15px; padding: 12px; background: rgba(16,185,129,0.05); border: 1px dashed rgba(16,185,129,0.3); border-radius: 8px;">
-                    <label class="form-label" style="color: #10b981; font-size:12px;">💡 Soạn bài giảng bằng AI</label>
+                    <label class="form-label" style="color: #10b981; font-size:12px;">💡 Soạn bài học bằng AI</label>
                     <div style="display: flex; gap: 8px;">
                         <input type="text" id="aiLibraryLessonPrompt" class="form-input" style="height: 38px;" placeholder="Nhập chủ đề...">
                         <button type="button" class="btn btn-primary" style="background: #10b981; border:none; height: 38px; white-space:nowrap" onclick="generateLessonWithAI('library')" id="btnGenerateLibraryLessonAI">Soạn thảo</button>
@@ -1534,6 +1535,11 @@
                     <div style="display: flex; gap: 8px; align-items: center; border-top: 1px solid #fed7aa; padding-top: 10px; margin-top: 5px;">
                         <input type="file" id="libraryExamFileAI" class="form-input" style="padding: 5px; font-size: 12px; flex: 1;">
                         <button class="btn btn-secondary" style="height: 38px; white-space: nowrap;" onclick="generateQuizFromFile('library')">🚀 Tạo từ File</button>
+                    </div>
+                    <div style="font-size:11px; margin-top:3px; color:#475569; display: flex; gap: 8px; align-items: center;">
+                        <span>📥 Tải file mẫu AI:</span>
+                        <a href="/uploads/TracNghiem_Mau.xlsx" style="background:#22c55e; color:#fff; text-decoration:none; padding:3px 6px; border-radius:4px; font-weight:600; font-size:10px;" download>📊 Excel Mẫu</a>
+                        <a href="/uploads/TracNghiem_Mau.docx" style="background:#3b82f6; color:#fff; text-decoration:none; padding:3px 6px; border-radius:4px; font-weight:600; font-size:10px;" download>📝 Word Mẫu</a>
                     </div>
                 </div>
                 <div id="aiQuizStatus" style="font-size:11px; margin-top:6px; color:#64748b"></div>
@@ -1707,6 +1713,30 @@
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeModal('bulkDeptModal')">Hủy bỏ</button>
             <button class="btn btn-primary" onclick="submitBulkDeptUpdate()">🚀 Xác nhận cập nhật</button>
+        </div>
+    </div>
+</div>
+
+<!-- Preview Library Modal (2-Column Structure) -->
+<div class="modal-backdrop" id="previewLibraryModal">
+    <div class="modal-box" style="max-width: 1200px; width: 95vw; height: 85vh; display: flex; flex-direction: column;">
+        <div class="modal-header">
+            <div class="modal-title" id="previewLibraryTitle">Xem nội dung tài liệu</div>
+            <button class="modal-close" onclick="closeModal('previewLibraryModal')">✖</button>
+        </div>
+        <div class="modal-body" style="flex: 1; display: flex; padding: 0; overflow: hidden; background: #fff;">
+            <!-- Left: Sidebar Tree -->
+            <div style="width: 340px; background: #f8fafc; border-right: 1px solid #e2e8f0; height: 100%; overflow-y: auto; padding: 15px;" id="previewLibrarySidebar">
+                <!-- Structure will be rendered here -->
+            </div>
+            <!-- Right: Content View -->
+            <div style="flex: 1; height: 100%; overflow-y: auto; padding: 25px;" id="previewLibraryContent">
+                <div style="text-align: center; color: #64748b; margin-top: 100px;">
+                    <div style="font-size: 48px; margin-bottom: 15px;">📖</div>
+                    <h4>Chọn một bài học ở menu bên trái</h4>
+                    <p style="font-size: 13px;">Nội dung bài học, video và tài liệu đính kèm sẽ hiển thị tại đây.</p>
+                </div>
+            </div>
         </div>
     </div>
 </div>

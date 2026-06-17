@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("KhoaHoc")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+91f26db95184a83fc002a189a8b5a8db55425898")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7f0d17624ed213a802c4551876f1ea52a9f42beb")]
 [assembly: System.Reflection.AssemblyProductAttribute("KhoaHoc")]
 [assembly: System.Reflection.AssemblyTitleAttribute("KhoaHoc")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

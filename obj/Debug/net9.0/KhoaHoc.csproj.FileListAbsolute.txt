@@ -1,5 +1,15 @@
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\appsettings.Development.json
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\appsettings.json
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\response_20.json
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\response_25.json
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\response_latest.json
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\response_v1.json
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\response_v1beta.json
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\scratch\create_samples\bin\Debug\net9.0\create_samples.deps.json
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\scratch\create_samples\bin\Debug\net9.0\create_samples.runtimeconfig.json
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\scratch\create_samples\obj\create_samples.csproj.nuget.dgspec.json
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\scratch\create_samples\obj\Debug\net9.0\create_samples.sourcelink.json
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\scratch\create_samples\obj\project.assets.json
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\tempbuild_verify\appsettings.Development.json
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\tempbuild_verify\appsettings.json
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\tempbuild_verify\KhoaHoc.deps.json
@@ -27,6 +37,9 @@ C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\Closed
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\ClosedXML.Parser.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\DocumentFormat.OpenXml.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\DocumentFormat.OpenXml.Framework.dll
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\Xceed.Document.NET.dll
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\Xceed.Drawing.NET.dll
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\Xceed.Words.NET.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\ExcelNumberFormat.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\Humanizer.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\Microsoft.Bcl.AsyncInterfaces.dll
@@ -57,6 +70,7 @@ C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\Micros
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\Mono.TextTemplating.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\RBush.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\SixLabors.Fonts.dll
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\SkiaSharp.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\System.ClientModel.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\System.CodeDom.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\System.Composition.AttributedModel.dll
@@ -145,6 +159,10 @@ C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtim
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtimes\win-x64\native\Microsoft.Data.SqlClient.SNI.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtimes\win-x86\native\Microsoft.Data.SqlClient.SNI.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtimes\win\lib\net6.0\Microsoft.Win32.SystemEvents.dll
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtimes\osx\native\libSkiaSharp.dylib
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtimes\win-arm64\native\libSkiaSharp.dll
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtimes\win-x64\native\libSkiaSharp.dll
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtimes\win-x86\native\libSkiaSharp.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtimes\unix\lib\net6.0\System.Drawing.Common.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtimes\win\lib\net6.0\System.Drawing.Common.dll
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtimes\win\lib\net6.0\System.Runtime.Caching.dll
@@ -231,6 +249,7 @@ C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compre
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\tps9a0xl7m-9vr69e8ynj.gz
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\ygrfwxyxe6-87fc7y1x7t.gz
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\nnj9d2xcp2-mlv21k5csn.gz
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\6njjw6h6wg-cpappoa8l8.gz
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\mspxo56czs-66r8v8wavq.gz
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\wm02rlkwb8-66r8v8wavq.gz
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\staticwebassets.build.json
@@ -243,12 +262,5 @@ C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\refint
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\KhoaHoc.pdb
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\KhoaHoc.genruntimeconfig.cache
 C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\ref\KhoaHoc.dll
-C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\Xceed.Document.NET.dll
-C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\Xceed.Drawing.NET.dll
-C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\Xceed.Words.NET.dll
-C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\SkiaSharp.dll
-C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtimes\osx\native\libSkiaSharp.dylib
-C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtimes\win-arm64\native\libSkiaSharp.dll
-C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtimes\win-x64\native\libSkiaSharp.dll
-C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\bin\Debug\net9.0\runtimes\win-x86\native\libSkiaSharp.dll
-C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\yuf0nz6cuo-tfywm9ht1y.gz
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\bd19lrn636-2ok0f5mxfn.gz
+C:\Users\hieud\Documents\DATN_PRO2192\hethongdaotaonoibo\obj\Debug\net9.0\compressed\yuf0nz6cuo-0m5unu3sr9.gz

@@ -200,7 +200,7 @@ function navigate(page) {
         "overview": { title: "Tổng quan hệ thống", sub: "Giám sát và quản lý hạ tầng LMS" },
         "users": { title: "Quản lý người dùng", sub: "Tìm kiếm, thêm mới và quản lý tài khoản" },
         "courses": { title: "Quản lý khóa học", sub: "Cấu hình và kiểm soát nội dung khóa học" },
-        "documents": { title: "Kho tài liệu", sub: "Quản lý kho chương, bài giảng và quiz toàn hệ thống" },
+        "documents": { title: "Kho tài liệu", sub: "Quản lý kho chương, bài học và quiz toàn hệ thống" },
         "schedules": { title: "Quản lý lịch học", sub: "Thêm, sửa và xóa lịch học offline cho nhân viên" },
         "departments": { title: "Quản lý phòng ban", sub: "Tổ chức cơ cấu nhân sự" },
         "auditlogs": { title: "Nhật ký hoạt động", sub: "Theo dõi biến động và lịch sử hệ thống" },
@@ -383,7 +383,7 @@ function getFilteredLibraryRows() {
 function renderDocumentLibrary() {
     const createBtn = document.getElementById('libraryCreateBtn');
     if (createBtn) {
-        createBtn.textContent = currentLibraryTab === 'modules' ? '➕ Tạo Chương Mới' : currentLibraryTab === 'lessons' ? '➕ Tạo Bài Giảng Mới' : currentLibraryTab === 'exams' ? '➕ Tạo Quiz Mới' : '➕ Tạo Câu Hỏi Mới';
+        createBtn.textContent = currentLibraryTab === 'modules' ? '➕ Tạo Chương Mới' : currentLibraryTab === 'lessons' ? '➕ Tạo Bài Học Mới' : currentLibraryTab === 'exams' ? '➕ Tạo Quiz Mới' : '➕ Tạo Câu Hỏi Mới';
     }
 
     const rows = getFilteredLibraryRows();
@@ -392,7 +392,7 @@ function renderDocumentLibrary() {
     if (!head || !body) return;
 
     if (currentLibraryTab === 'modules') {
-        head.innerHTML = '<tr><th>ID</th><th>Tên chương</th><th>Level</th><th>Sử dụng trong</th><th>Bài giảng</th><th>Thao tác</th></tr>';
+        head.innerHTML = '<tr><th>ID</th><th>Tên chương</th><th>Level</th><th>Sử dụng trong</th><th>Bài học</th><th>Thao tác</th></tr>';
         body.innerHTML = rows.length ? rows.map(row => `
             <tr>
                 <td>${row.moduleId}</td>
@@ -402,6 +402,7 @@ function renderDocumentLibrary() {
                 <td>${row.lessonsCount || 0}</td>
                 <td>
                     <div style="display:flex;gap:8px;justify-content:flex-end">
+                        <button class="btn btn-info btn-sm" style="background:#3b82f6;color:white;border:none" onclick="previewModuleLessons(${row.moduleId})">Xem</button>
                         <button class="btn btn-secondary btn-sm" onclick="openEditModuleModal(${row.moduleId})">Sửa</button>
                         <button class="btn btn-danger btn-sm" onclick="deleteModule(${row.moduleId})">Xóa</button>
                     </div>
@@ -412,7 +413,7 @@ function renderDocumentLibrary() {
     }
 
     if (currentLibraryTab === 'lessons') {
-        head.innerHTML = '<tr><th>ID</th><th>Tên bài giảng</th><th>Thuộc chương</th><th>Khóa học</th><th>Tài liệu</th><th>Thao tác</th></tr>';
+        head.innerHTML = '<tr><th>ID</th><th>Tên bài học</th><th>Thuộc chương</th><th>Khóa học</th><th>Tài liệu</th><th>Thao tác</th></tr>';
         body.innerHTML = rows.length ? rows.map(row => {
             const attachments = row.attachmentsCount ? `<span class="badge badge-blue">${row.attachmentsCount} tài liệu</span>` : '<span style="color:#94a3b8">Chưa có</span>';
             const video = row.videoUrl ? '<span class="badge badge-info">Video</span>' : '';
@@ -433,12 +434,13 @@ function renderDocumentLibrary() {
                 <td>${attachments}</td>
                 <td>
                     <div style="display:flex;gap:8px;justify-content:flex-end">
+                        <button class="btn btn-info btn-sm" style="background:#3b82f6;color:white;border:none" onclick="previewLessonContent(${row.lessonId})">Xem</button>
                         <button class="btn btn-secondary btn-sm" onclick="openEditLessonModal(${row.lessonId})">Sửa</button>
                         <button class="btn btn-danger btn-sm" onclick="deleteLesson(${row.lessonId})">Xóa</button>
                     </div>
                 </td>
             </tr>`;
-        }).join('') : '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px">Chưa có bài giảng nào.</td></tr>';
+        }).join('') : '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px">Chưa có bài học nào.</td></tr>';
         return;
     }
 
@@ -682,7 +684,7 @@ async function submitLibraryLesson() {
     try {
         await apiFetch(`/api/it/modules/${moduleId}/lessons`, { method: 'POST', body: formData, isFormData: true });
         closeModal('libraryLessonModal');
-        showToast('Tạo bài giảng thành công!');
+        showToast('Tạo bài học thành công!');
         await loadDocumentLibrary();
     } catch(e) { showToast(e.message, 'error'); }
 }
@@ -718,12 +720,12 @@ async function generateLessonWithAI(prefix) {
     const titleId = prefix === 'library' ? 'libraryLessonTitleInput' : 'lessonTitleInput';
 
     const prompt = document.getElementById(promptId).value.trim();
-    if (!prompt) { showToast('Vui lòng nhập chủ đề bài giảng!', 'warning'); return; }
+    if (!prompt) { showToast('Vui lòng nhập chủ đề bài học!', 'warning'); return; }
 
     const statusEl = document.getElementById(statusId);
     const btn = document.getElementById(btnId);
 
-    statusEl.innerHTML = '<span class="spinner-small"></span> Đang soạn thảo bài giảng...';
+    statusEl.innerHTML = '<span class="spinner-small"></span> Đang soạn thảo bài học...';
     btn.disabled = true;
 
     try {
@@ -844,11 +846,13 @@ async function generateQuizWithAI(source = 'library') {
     }
     
     btn.disabled = true;
+    const originalText = btn.innerText;
     btn.innerText = 'Đang xử lý...';
     statusDiv.innerText = '⏳ AI đang thiết kế bộ câu hỏi...';
     
     try {
-        const result = await apiFetch('/api/it/generate-quiz-ai', {
+        const apiPath = source === 'library' ? '/api/it/generate-quiz-ai' : '/api/it/exams/generate';
+        const result = await apiFetch(apiPath, {
             method: 'POST',
             body: JSON.stringify({ prompt })
         });
@@ -858,11 +862,15 @@ async function generateQuizWithAI(source = 'library') {
             if (result.questions) {
                 lastGeneratedQuestions = result.questions.map(q => ({
                     questionText: q.questionText,
+                    questionType: q.questionType || q.QuestionType || 'MultipleChoice',
                     points: q.points || 10,
-                    options: q.options.map((opt, idx) => ({
-                        optionText: opt,
-                        isCorrect: (idx + 1) === q.correctOptionIndex
-                    }))
+                    options: (q.options || []).map(opt => {
+                        if (typeof opt === 'string') return { optionText: opt, isCorrect: false };
+                        return {
+                            optionText: opt.optionText || opt.OptionText || '',
+                            isCorrect: opt.isCorrect !== undefined ? opt.isCorrect : (opt.IsCorrect || false)
+                        };
+                    })
                 }));
                 statusDiv.innerText = `✅ Đã soạn ${lastGeneratedQuestions.length} câu hỏi.`;
                 showToast('AI đã soạn thảo xong!');
@@ -872,7 +880,7 @@ async function generateQuizWithAI(source = 'library') {
         showToast('Lỗi AI: ' + e.message, 'error');
     } finally {
         btn.disabled = false;
-        btn.innerText = 'Tạo từ Text';
+        btn.innerText = originalText;
     }
 }
 
@@ -899,7 +907,8 @@ async function generateQuizFromFile(source = 'exam') {
         
         const pureBase64 = base64Full.split(',')[1];
         
-        const result = await apiFetch('/api/it/generate-quiz-from-file', {
+        const apiPath = source === 'library' ? '/api/it/generate-quiz-from-file' : '/api/it/exams/generate-from-file';
+        const result = await apiFetch(apiPath, {
             method: 'POST',
             body: JSON.stringify({
                 base64Data: pureBase64,
@@ -910,21 +919,64 @@ async function generateQuizFromFile(source = 'exam') {
         if (result && result.questions) {
             lastGeneratedQuestions = result.questions.map(q => ({
                 questionText: q.questionText,
+                questionType: q.questionType || q.QuestionType || 'MultipleChoice',
                 points: q.points || 10,
-                options: q.options.map((opt, idx) => ({
-                    optionText: opt,
-                    isCorrect: (idx + 1) === q.correctOptionIndex
-                }))
+                options: (q.options || []).map(opt => {
+                    if (typeof opt === 'string') return { optionText: opt, isCorrect: false };
+                    return {
+                        optionText: opt.optionText || opt.OptionText || '',
+                        isCorrect: opt.isCorrect !== undefined ? opt.isCorrect : (opt.IsCorrect || false)
+                    };
+                })
             }));
             
             statusDiv.innerText = `✅ Đã trích xuất ${lastGeneratedQuestions.length} câu hỏi thành công!`;
             statusDiv.style.color = '#10b981';
             showToast('Đã trích xuất câu hỏi từ file!');
+
+            // Tự động lưu bài quiz ngay sau khi trích xuất thành công
+            showToast('Đang tự động lưu bài thi...', 'info');
+            const cleanFileName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+            const payload = { 
+                examTitle: result.examTitle || `Bài thi từ file: ${cleanFileName}`, 
+                level: null, 
+                durationMinutes: result.durationMinutes || 30, 
+                passScore: 50, 
+                maxAttempts: 1, 
+                startDate: null, 
+                endDate: null, 
+                targetDepartmentId: null,
+                aiQuestions: lastGeneratedQuestions
+            };
+
+            const saveResult = await apiFetch(`/api/it/courses/0/exams`, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+
+            if (saveResult && saveResult.examId) {
+                showToast('Đã tự động lưu bài quiz mới thành công!', 'success');
+                lastGeneratedQuestions = [];
+                closeModal(source === 'exam' ? 'examModal' : 'libraryExamModal');
+                
+                await syncDocumentLibraryAfterCreate({
+                    tab: 'exams',
+                    courseId: 0,
+                    refreshCourseContent: true
+                });
+
+                if (typeof loadExamsPageList === 'function') {
+                    await loadExamsPageList();
+                }
+
+                // Tự động mở modal Quản lý câu hỏi để người dùng xem luôn
+                await openExamQuestionsManagementModal(saveResult.examId);
+            }
         }
     } catch(e) {
         statusDiv.innerText = '❌ Lỗi: ' + e.message;
         statusDiv.style.color = '#ef4444';
-        showToast('Lỗi xử lý file AI', 'error');
+        showToast('Lỗi xử lý file AI: ' + e.message, 'error');
     }
 }
 
@@ -965,7 +1017,7 @@ async function generateLessonWithAI(source) {
     const bodyId = source === 'library' ? 'libraryLessonBodyInput' : 'lessonBodyInput';
 
     const prompt = document.getElementById(promptId).value.trim();
-    if (!prompt) { showToast('Vui lòng nhập chủ đề bài giảng!', 'warning'); return; }
+    if (!prompt) { showToast('Vui lòng nhập chủ đề bài học!', 'warning'); return; }
 
     const statusEl = document.getElementById(statusId);
     const btn = document.getElementById(btnId);
@@ -1422,31 +1474,38 @@ async function loadItCourses() {
     try {
         const res = await apiFetch(`/api/it/courses?search=${encodeURIComponent(search)}`);
         loadedCoursesList = res.courses || res || [];
-        document.getElementById('itCoursesTable').innerHTML = loadedCoursesList.map(c => `
-            <tr>
-                <td>${c.courseId || c.id}</td>
-                <td><code>${c.courseCode || '—'}</code></td>
-                <td>
-                    <div style="display:grid;gap:4px">
-                        <strong>${c.title}</strong>
-                        <span style="font-size:12px;color:#64748b">${c.description ? c.description.substring(0, 56) + (c.description.length > 56 ? '...' : '') : 'Chưa có mô tả'}</span>
+        const container = document.getElementById('itCoursesContainer');
+        if (container) {
+            container.innerHTML = loadedCoursesList.map(c => {
+                const courseId = c.courseId || c.id;
+                const isMandatory = c.isMandatory;
+                return `
+                <div class="course-list-item">
+                    <div class="course-icon-box" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6;">📖</div>
+                    <div class="course-list-info">
+                        <div class="course-list-title">${libraryEscape(c.title)} (<code>${c.courseCode || '—'}</code>)</div>
+                        <div class="course-list-meta">
+                            <span class="badge badge-info">${libraryEscape(c.category || 'N/A')}</span>
+                            <span class="badge badge-purple" style="margin-left:6px;">Level ${c.level || 1}</span>
+                            ${isMandatory ? '<span class="badge badge-orange" style="margin-left:6px; background:#fef2f2; color:#ef4444; border:1px solid #fee2e2;">Bắt buộc</span>' : ''}
+                            <span class="badge badge-purple" style="margin-left:6px;">${c.status || 'Active'}</span>
+                            <span style="margin-left:8px">${c.moduleCount || c.modulesCount || 0} chương • ${c.lessonCount || c.lessonsCount || 0} bài học • ${c.examCount || c.examsCount || 0} quiz</span>
+                        </div>
                     </div>
-                </td>
-                <td>${c.level ? `<span class="badge badge-purple">Level ${c.level}</span>` : '<span style="color:#94a3b8">--</span>'}</td>
-                <td><span class="badge badge-info">${c.category || 'N/A'}</span></td>
-                <td>${c.isMandatory ? '<span class="badge" style="background:#fef2f2;color:#ef4444">Bắt buộc</span>' : '<span style="color:#94a3b8">Tùy chọn</span>'}</td>
-                <td>${statusBadge(c.status || 'Active')}</td>
-                <td>
-                    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                    <button class="btn btn-info btn-sm" onclick="openCourseContentModal(${c.courseId || c.id})" style="padding:6px;background:#3b82f6;color:white;border:none" title="Quản lý Nội dung 📂">📂 Nội dung</button>
-                    <button class="btn btn-secondary btn-sm" onclick="openEditCourseModal(${c.courseId || c.id})" title="Sửa">📝</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteCourse(${c.courseId || c.id})" style="padding: 6px;" title="Xóa">🗑️</button>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <button class="btn btn-sm btn-secondary" onclick="openCourseContentModal(${courseId})">Nội dung</button>
+                        <button class="btn btn-sm btn-secondary" onclick="openEditCourseModal(${courseId})">Sửa</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteCourse(${courseId})">Xóa</button>
                     </div>
-                </td>
-            </tr>
-        `).join('') || '<tr><td colspan="8" style="text-align:center">Không có dữ liệu</td></tr>';
+                </div>
+                `;
+            }).join('') || '<div style="text-align:center; padding:40px; color:#64748b;">Không tìm thấy khóa học nào.</div>';
+        }
     } catch(e) {
-        document.getElementById('itCoursesTable').innerHTML = `<tr><td colspan="8" style="text-align:center;color:#ef4444">Không tải được khóa học: ${e.message}</td></tr>`;
+        const container = document.getElementById('itCoursesContainer');
+        if (container) {
+            container.innerHTML = `<div style="text-align:center; padding:40px; color:#ef4444;">Không tải được khóa học: ${e.message}</div>`;
+        }
     }
 }
 const debouncedLoadItCourses = debounce(loadItCourses, 400);
@@ -1509,6 +1568,54 @@ async function generateWithAI() {
         btn.innerHTML = 'Tạo';
         btn.disabled = false;
     }
+}
+
+function importCourseFromWordAI() {
+    const fileInput = document.getElementById('aiCourseWordFile');
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        showToast('Vui lòng chọn file .docx để nhập AI.', 'warning');
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+    
+    const btn = document.getElementById('btnImportWordAI');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '⌛ Đang xử lý...';
+
+    reader.onload = async function(e) {
+        const base64Data = e.target.result.split(',')[1];
+        
+        try {
+            const response = await fetch('/api/it/ai-create-course-from-word', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ base64Data: base64Data })
+            });
+
+            const result = await response.json();
+            if (response.ok && result.success) {
+                showToast(`Đã tạo thành công khóa học: ${result.title}`, 'success');
+                closeModal('courseModal');
+                await loadItCourses();
+            } else {
+                showToast(result.error || result.message || 'Lỗi khi import khóa học bằng AI.', 'error');
+            }
+        } catch (error) {
+            console.error(error);
+            showToast('Lỗi kết nối khi gửi file lên AI.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            fileInput.value = '';
+        }
+    };
+
+    reader.readAsDataURL(file);
 }
 
 async function submitCourse() {
@@ -1661,10 +1768,10 @@ async function openCourseContentModal(courseId) {
 }
 
 function openModuleModal() {
-    document.getElementById('moduleModalTitle').textContent = '🧩 Thêm chương mới';
-    document.getElementById('moduleModalId').value = '';
-    document.getElementById('moduleModalTitleInput').value = '';
-    document.getElementById('moduleModalLevelInput').value = '1';
+    const titleEl = document.getElementById('moduleTitleInput');
+    const levelEl = document.getElementById('moduleLevelInput');
+    if (titleEl) titleEl.value = '';
+    if (levelEl) levelEl.value = '1';
     openModal('moduleModal');
 }
 
@@ -1680,33 +1787,31 @@ async function openEditModuleModal(id) {
         }
         if (!m) return showToast('Không tìm thấy chương!', 'error');
 
-        document.getElementById('moduleModalTitle').textContent = '📝 Sửa chương';
-        document.getElementById('moduleModalId').value = id;
-        document.getElementById('moduleModalTitleInput').value = m.title || '';
-        document.getElementById('moduleModalLevelInput').value = m.level || '1';
-        openModal('moduleModal');
+        const idEl = document.getElementById('editModuleId');
+        const titleEl = document.getElementById('editModuleTitleInput');
+        const levelEl = document.getElementById('editModuleLevelInput');
+
+        if (idEl) idEl.value = id;
+        if (titleEl) titleEl.value = m.title || m.moduleTitle || '';
+        if (levelEl) levelEl.value = m.level || '1';
+
+        openModal('editModuleModal');
     } catch(e) {
         showToast(e.message, 'error');
     }
 }
 
 async function submitModule() {
-    const id = document.getElementById('moduleModalId').value;
-    const body = {
-        title: document.getElementById('moduleModalTitleInput').value,
-        level: parseInt(document.getElementById('moduleModalLevelInput').value) || 1
-    };
-    if (!body.title) return showToast('Nhập tiêu đề chương!', 'error');
+    const title = document.getElementById('moduleTitleInput').value.trim();
+    const level = parseInt(document.getElementById('moduleLevelInput').value) || 1;
+    if (!title) return showToast('Nhập tiêu đề chương!', 'error');
+
+    const body = { title, level };
 
     try {
-        if (id) {
-            await apiFetch(`/api/it/modules/${id}`, { method: 'PUT', body: JSON.stringify(body) });
-            showToast('Cập nhật chương thành công!');
-        } else {
-            const courseId = currentContentCourseId || 0;
-            await apiFetch(`/api/it/courses/${courseId}/modules`, { method: 'POST', body: JSON.stringify(body) });
-            showToast('Thêm chương thành công!');
-        }
+        const courseId = currentContentCourseId || 0;
+        await apiFetch(`/api/it/courses/${courseId}/modules`, { method: 'POST', body: JSON.stringify(body) });
+        showToast('Thêm chương thành công!');
         closeModal('moduleModal');
         if (currentContentCourseId) loadCourseContent();
         await loadDocumentLibrary();
@@ -1827,7 +1932,7 @@ function renderBuilderStructure() {
                                 <button class="btn btn-sm" style="padding:2px 6px; border:none; background:transparent; color:#ef4444;" onclick="unlinkLesson(${l.lessonId})">🗑️</button>
                             </div>
                         </div>
-                    `).join('') : '<div style="text-align:center; padding:15px; color:#cbd5e1; font-size:11px; border:1px dashed #f1f5f9; border-radius:6px;">Kéo bài giảng vào đây</div>'}
+                    `).join('') : '<div style="text-align:center; padding:15px; color:#cbd5e1; font-size:11px; border:1px dashed #f1f5f9; border-radius:6px;">Kéo bài học vào đây</div>'}
                 </div>
             </div>`;
         });
@@ -1907,7 +2012,7 @@ async function handleMainDrop(e) {
             }
         }
     } else if (dragData.type === 'lesson') {
-        showToast('Kéo bài giảng vào chương cụ thể!', 'warning');
+        showToast('Kéo bài học vào chương cụ thể!', 'warning');
     }
     dragData = null;
 }
@@ -1915,12 +2020,12 @@ async function handleModuleDrop(e, moduleId) {
     e.stopPropagation(); e.preventDefault();
     handleDragLeave(e);
     if (!dragData || dragData.type !== 'lesson') return;
-    if (confirm('Gán bài giảng "' + dragData.title + '" vào chương này?')) {
+    if (confirm('Gán bài học "' + dragData.title + '" vào chương này?')) {
         try {
             await apiFetch(`/api/it/lessons/${dragData.id}/link-to-module/${moduleId}`, {
                 method: 'POST'
             });
-            showToast('Đã gán bài giảng vào chương.'); 
+            showToast('Đã gán bài học vào chương.'); 
             loadCourseContent();
             await loadDocumentLibrary();
         } catch (err) { showToast(err.message, 'error'); }
@@ -1939,10 +2044,10 @@ async function unlinkModule(moduleId) {
 }
 
 async function unlinkLesson(lessonId) {
-    if (!confirm('Gỡ bài giảng này khỏi chương?')) return;
+    if (!confirm('Gỡ bài học này khỏi chương?')) return;
     try {
         await apiFetch(`/api/it/lessons/${lessonId}/unlink-from-module`, { method: 'POST' });
-        showToast('Đã gỡ bài giảng.');
+        showToast('Đã gỡ bài học.');
         loadCourseContent();
         await loadDocumentLibrary();
     } catch (e) { showToast(e.message, 'error'); }
@@ -2000,7 +2105,7 @@ async function submitLesson() {
         document.getElementById('lessonVideoLinkInput').value = '';
 
         closeModal('lessonModal');
-        showToast('Thêm bài giảng thành công!');
+        showToast('Thêm bài học thành công!');
         loadCourseContent();
         await loadDocumentLibrary();
     } catch (e) { showToast(e.message, 'error'); }
@@ -2009,7 +2114,7 @@ async function submitLesson() {
 async function openEditLessonModal(id) {
     try {
         const lesson = documentLibraryData.lessons.find(l => l.lessonId == id);
-        if (!lesson) return showToast('Không thấy bài giảng!', 'error');
+        if (!lesson) return showToast('Không thấy bài học!', 'error');
         
         const idEl = document.getElementById('editLessonId');
         const titleEl = document.getElementById('editLessonTitleInput');
@@ -2113,7 +2218,7 @@ async function submitEditLesson() {
         document.getElementById('editLessonVideoLinkInput').value = '';
 
         closeModal('editLessonModal');
-        showToast('Cập nhật bài giảng thành công!');
+        showToast('Cập nhật bài học thành công!');
         loadCourseContent();
         await loadDocumentLibrary();
     } catch (e) { showToast(e.message, 'error'); }
@@ -2327,7 +2432,8 @@ async function suggestQuestionWithAI() {
                     if (optInput) {
                         optInput.value = q.options[i-1] ? (typeof q.options[i-1] === 'string' ? q.options[i-1] : (q.options[i-1].optionText || '')) : '';
                     }
-                    if (radio && i === ((q.correctOptionIndex || 0) + 1)) {
+                    const isCorrectOpt = q.options[i-1] && (typeof q.options[i-1] === 'object' ? (q.options[i-1].isCorrect || q.options[i-1].IsCorrect || false) : (i === ((q.correctOptionIndex || 0) + 1)));
+                    if (radio && isCorrectOpt) {
                         radio.checked = true;
                     }
                 }
@@ -3077,29 +3183,48 @@ function addNewQuestionUI(data = null, index = null) {
     div.style = 'background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:18px; position:relative; box-shadow:0 2px 4px rgba(0,0,0,0.02);';
     
     const questionText = data ? data.questionText : '';
+    const questionType = (data ? (data.questionType || data.QuestionType) : 'MultipleChoice') || 'MultipleChoice';
     const points = data ? data.points : 10;
-    const options = data ? data.options : [
-        { optionText: '', isCorrect: true },
-        { optionText: '', isCorrect: false },
-        { optionText: '', isCorrect: false },
-        { optionText: '', isCorrect: false }
-    ];
-
+    
+    let options = [];
+    if (data && data.options) {
+        options = data.options;
+    } else {
+        if (questionType === 'MultipleChoice') {
+            options = [
+                { optionText: '', isCorrect: true },
+                { optionText: '', isCorrect: false },
+                { optionText: '', isCorrect: false },
+                { optionText: '', isCorrect: false }
+            ];
+        } else if (questionType === 'FillInTheBlank') {
+            options = [
+                { optionText: '', isCorrect: true }
+            ];
+        } else {
+            options = [];
+        }
+    }
+    
+    const uniqueId = 'q_opts_' + Math.random().toString(36).substr(2, 9);
+    
     div.innerHTML = `
-        <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
             <div style="font-weight:bold; color:#1e293b; font-size:15px;">Câu ${idx}</div>
-            <button class="btn btn-danger btn-sm" onclick="this.closest('.question-row-item').remove(); updateNextQuestionNum(); redistributePoints();" style="padding:4px 8px; font-size:11px;">🗑️ Loại bỏ</button>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <select class="form-input q-type" style="width:140px; padding:4px 8px; font-size:12px; margin:0;" onchange="handleQuestionTypeChange(this, '${uniqueId}')">
+                    <option value="MultipleChoice" ${questionType === 'MultipleChoice' ? 'selected' : ''}>Trắc nghiệm</option>
+                    <option value="FillInTheBlank" ${questionType === 'FillInTheBlank' ? 'selected' : ''}>Điền chỗ trống</option>
+                    <option value="Essay" ${questionType === 'Essay' ? 'selected' : ''}>Tự luận</option>
+                </select>
+                <button class="btn btn-danger btn-sm" onclick="this.closest('.question-row-item').remove(); updateNextQuestionNum(); redistributePoints();" style="padding:4px 8px; font-size:11px;">🗑️ Loại bỏ</button>
+            </div>
         </div>
         <div class="form-group" style="margin-bottom:12px;">
             <input type="text" class="form-input q-text" placeholder="Nhập nội dung câu hỏi..." value="${libraryEscape(questionText)}">
         </div>
-        <div class="grid-2" style="gap:10px;">
-            ${options.map((opt, i) => `
-                <div style="display:flex; align-items:center; gap:8px; background:#f8fafc; padding:8px; border-radius:6px; border:1px solid #f1f5f9;">
-                    <input type="checkbox" class="q-correct" value="${i}" ${opt.isCorrect ? 'checked' : ''} style="cursor:pointer; width:16px; height:16px;">
-                    <input type="text" class="form-input q-opt" style="border:none; background:transparent; padding:4px;" placeholder="Đáp án ${i+1}" value="${libraryEscape(opt.optionText)}">
-                </div>
-            `).join('')}
+        <div id="${uniqueId}" class="options-container">
+            <!-- options will be rendered here -->
         </div>
         <div style="margin-top:10px; display:flex; justify-content:flex-end;">
             <div style="display:flex; align-items:center; gap:6px;">
@@ -3110,10 +3235,73 @@ function addNewQuestionUI(data = null, index = null) {
     `;
     
     container.appendChild(div);
+    renderQuestionOptionsUI(div.querySelector(`#${uniqueId}`), questionType, options);
     updateNextQuestionNum();
     
-    // Tự động chia lại điểm khi thêm mới
     redistributePoints();
+}
+
+function renderQuestionOptionsUI(container, type, options = []) {
+    if (type === 'MultipleChoice') {
+        while (options.length < 4) {
+            options.push({ optionText: '', isCorrect: options.length === 0 });
+        }
+        options = options.slice(0, 4);
+        
+        container.innerHTML = `
+            <div class="grid-2" style="gap:10px; display:grid; grid-template-columns: 1fr 1fr;">
+                ${options.map((opt, i) => `
+                    <div style="display:flex; align-items:center; gap:8px; background:#f8fafc; padding:8px; border-radius:6px; border:1px solid #f1f5f9;">
+                        <input type="checkbox" class="q-correct" value="${i}" ${opt.isCorrect ? 'checked' : ''} style="cursor:pointer; width:16px; height:16px;" onchange="handleMultipleChoiceCorrectSelect(this)">
+                        <input type="text" class="form-input q-opt" style="border:none; background:transparent; padding:4px;" placeholder="Đáp án ${i+1}" value="${libraryEscape(opt.optionText)}">
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    } else if (type === 'FillInTheBlank') {
+        const val = options.length > 0 ? options[0].optionText : '';
+        container.innerHTML = `
+            <div style="background:#f8fafc; padding:12px; border-radius:6px; border:1px solid #f1f5f9;">
+                <label style="font-size:12px; font-weight:bold; color:#475569; display:block; margin-bottom:6px;">Đáp án chính xác cần điền:</label>
+                <input type="text" class="form-input q-opt" style="margin:0; width:100%;" placeholder="Nhập đáp án đúng..." value="${libraryEscape(val)}">
+                <input type="checkbox" class="q-correct" checked style="display:none;" value="0">
+            </div>
+        `;
+    } else if (type === 'Essay') {
+        container.innerHTML = `
+            <div style="background:#f8fafc; padding:12px; border-radius:6px; border:1px solid #f1f5f9; color:#64748b; font-size:13px; font-style:italic;">
+                📝 Học viên sẽ trả lời bằng bài viết tự luận. Giảng viên sẽ chấm điểm thủ công sau khi thi xong.
+            </div>
+        `;
+    }
+}
+
+function handleQuestionTypeChange(selectEl, containerId) {
+    const type = selectEl.value;
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    let options = [];
+    if (type === 'MultipleChoice') {
+        options = [
+            { optionText: '', isCorrect: true },
+            { optionText: '', isCorrect: false },
+            { optionText: '', isCorrect: false },
+            { optionText: '', isCorrect: false }
+        ];
+    } else if (type === 'FillInTheBlank') {
+        options = [
+            { optionText: '', isCorrect: true }
+        ];
+    } else {
+        options = [];
+    }
+    
+    renderQuestionOptionsUI(container, type, options);
+}
+
+function handleMultipleChoiceCorrectSelect(checkbox) {
+    // Cho phép chọn nhiều đáp án đúng tự do
 }
 
 function redistributePoints() {
@@ -3124,14 +3312,12 @@ function redistributePoints() {
     const rows = document.querySelectorAll('.question-row-item');
     if (rows.length === 0) return;
     
-    // Chỉ chia đều khi chưa có điểm được sửa tay hoặc khi thêm/xóa câu
     const totalTarget = quiz.passScore || 50;
     const avg = Math.floor(totalTarget / rows.length);
     const remainder = totalTarget % rows.length;
     
     rows.forEach((row, i) => {
         const input = row.querySelector('.q-points');
-        // Chia đều, câu cuối cùng nhận phần dư để đảm bảo tổng luôn khớp
         input.value = (i === rows.length - 1) ? (avg + remainder) : avg;
     });
 }
@@ -3156,13 +3342,15 @@ async function saveExamQuestionsBatch() {
         const text = row.querySelector('.q-text').value.trim();
         const points = parseFloat(row.querySelector('.q-points').value) || 0;
         totalPoints += points;
+        const qType = row.querySelector('.q-type').value;
+        
         const optsEls = row.querySelectorAll('.q-opt');
         const correctCheckboxes = row.querySelectorAll('.q-correct');
         
         const options = [];
         optsEls.forEach((optEl, i) => {
             const optText = optEl.value.trim();
-            if (optText) {
+            if (optText || qType === 'FillInTheBlank') {
                 const isCorrect = correctCheckboxes[i]?.checked || false;
                 options.push({ optionText: optText, isCorrect: isCorrect });
             }
@@ -3173,18 +3361,27 @@ async function saveExamQuestionsBatch() {
             hasError = true;
             return;
         }
-        if (options.length < 2) {
-            showToast(`Câu ${idx+1} cần ít nhất 2 đáp án!`, 'error');
-            hasError = true;
-            return;
-        }
-        if (!options.some(o => o.isCorrect)) {
-            showToast(`Câu ${idx+1} cần ít nhất 1 đáp án đúng!`, 'error');
-            hasError = true;
-            return;
+
+        if (qType === 'MultipleChoice') {
+            if (options.length < 2) {
+                showToast(`Câu ${idx+1} cần ít nhất 2 đáp án!`, 'error');
+                hasError = true;
+                return;
+            }
+            if (!options.some(o => o.isCorrect)) {
+                showToast(`Câu ${idx+1} cần ít nhất 1 đáp án đúng!`, 'error');
+                hasError = true;
+                return;
+            }
+        } else if (qType === 'FillInTheBlank') {
+            if (options.length === 0 || !options[0].optionText) {
+                showToast(`Câu ${idx+1} cần điền từ khoá đáp án chính xác!`, 'error');
+                hasError = true;
+                return;
+            }
         }
 
-        questions.push({ questionText: text, points, options });
+        questions.push({ questionText: text, points, questionType: qType, options });
     });
 
     const quiz = documentLibraryData.exams.find(e => e.examId === parseInt(examId));
@@ -3572,7 +3769,7 @@ function renderApprovalsTable(data) {
         let typeLabel, typeIcon;
         if (a.targetType === 'course') { typeLabel = 'Khóa học'; typeIcon = '📚'; }
         else if (a.examName || a.targetType === 'quiz') { typeLabel = 'Quiz'; typeIcon = '📝'; }
-        else if (a.lessonName || a.targetType === 'lesson') { typeLabel = 'Bài giảng'; typeIcon = '🎬'; }
+        else if (a.lessonName || a.targetType === 'lesson') { typeLabel = 'Bài học'; typeIcon = '🎬'; }
         else if (a.moduleName || a.targetType === 'module') { typeLabel = 'Chương'; typeIcon = '📚'; }
         else { typeLabel = 'Tài liệu'; typeIcon = '📄'; }
 
@@ -3582,7 +3779,7 @@ function renderApprovalsTable(data) {
         let creationLabel = '';
         if (a.targetType === 'course') creationLabel = `<span class="badge" style="background:#e0f2fe;color:#0369a1;margin-top:4px;">+ Yêu cầu Khóa học mới</span>`;
         if (a.newModuleName) creationLabel += `<span class="badge" style="background:#fef3c7;color:#92400e;margin-top:4px;">+ Chương: ${libraryEscape(a.newModuleName)}</span> `;
-        if (a.newLessonName) creationLabel += `<span class="badge" style="background:#f0fdf4;color:#166534;margin-top:4px;">+ Bài giảng: ${libraryEscape(a.newLessonName)}</span> `;
+        if (a.newLessonName) creationLabel += `<span class="badge" style="background:#f0fdf4;color:#166534;margin-top:4px;">+ Bài học: ${libraryEscape(a.newLessonName)}</span> `;
         if (a.newExamName) creationLabel += `<span class="badge" style="background:#fff7ed;color:#9a3412;margin-top:4px;">+ Quiz: ${libraryEscape(a.newExamName)}</span>`;
 
         return `
@@ -3617,7 +3814,7 @@ async function openApprovalDetail(id) {
     if (item.examName) linkStr = 'Quiz: ' + item.examName;
     else if (item.moduleName) {
         linkStr = 'Chương: ' + item.moduleName;
-        if (item.lessonName) linkStr += ' > Bài giảng: ' + item.lessonName;
+        if (item.lessonName) linkStr += ' > Bài học: ' + item.lessonName;
     }
 
     let creationHtml = '';
@@ -3636,7 +3833,7 @@ async function openApprovalDetail(id) {
             } else if (item.targetType === 'lesson') {
                 creationHtml = `
                     <div style="margin-top:16px; padding:16px; background:#f0f9ff; border:1px solid #e0f2fe; border-radius:12px;">
-                        <div style="font-weight:700; color:#0369a1; font-size:14px; margin-bottom:10px;">📝 Tạo Bài giảng mới</div>
+                        <div style="font-weight:700; color:#0369a1; font-size:14px; margin-bottom:10px;">📝 Tạo Bài học mới</div>
                         <div style="font-size:13px; color:#0369a1; display:flex; flex-direction:column; gap:6px;">
                             <div><b>Tiêu đề:</b> ${libraryEscape(data.title)}</div>
                             ${data.newModuleName ? `<div style="padding:4px 8px; background:#fff; border-radius:6px; border:1px dashed #0369a1; display:inline-block; margin:4px 0;">✨ Cũng tạo chương: <b>${libraryEscape(data.newModuleName)}</b></div>` : ''}
@@ -3688,7 +3885,7 @@ async function openApprovalDetail(id) {
                 <div style="font-weight:700; color:#9a3412; font-size:13px; margin-bottom:8px;">🚀 Yêu cầu tạo nội dung (Legacy):</div>
                 <ul style="margin:0; padding-left:20px; font-size:13px; color:#c2410c;">
                     ${item.newModuleName ? `<li>Chương: <b>${libraryEscape(item.newModuleName)}</b></li>` : ''}
-                    ${item.newLessonName ? `<li>Bài giảng: <b>${libraryEscape(item.newLessonName)}</b></li>` : ''}
+                    ${item.newLessonName ? `<li>Bài học: <b>${libraryEscape(item.newLessonName)}</b></li>` : ''}
                     ${item.newExamName ? `<li>Quiz: <b>${libraryEscape(item.newExamName)}</b></li>` : ''}
                 </ul>
             </div>`;
@@ -3810,118 +4007,6 @@ async function loadAttendanceList() {
     }
 }
 
-async function generateQuizWithAI(type) {
-    const prompt = document.getElementById('aiExamPrompt').value.trim();
-    if (!prompt) { showToast('Hãy nhập mô tả bài thi!', 'warning'); return; }
-    
-    const btn = document.getElementById('btnGenerateExamAI');
-    if (btn) { btn.disabled = true; btn.innerHTML = '✨ Đang tạo...'; }
-    
-    try {
-        const data = await apiFetch('/api/it/exams/generate', {
-            method: 'POST',
-            body: JSON.stringify({ prompt })
-        });
-        
-        document.getElementById('examTitleInput').value = data.examTitle || 'Quiz mới';
-        document.getElementById('examDurationInput').value = data.durationMinutes || 30;
-        
-        // Transform AI data to match ItCreateQuestionDto structure
-        lastGeneratedQuestions = (data.questions || []).map(q => ({
-            questionText: q.questionText,
-            points: q.points || 10,
-            options: (q.options || []).map((optText, idx) => ({
-                optionText: optText,
-                isCorrect: idx === q.correctOptionIndex
-            }))
-        }));
-        
-        showToast(`AI đã tạo ${lastGeneratedQuestions.length} câu hỏi!`, 'success');
-        
-        const status = document.getElementById('aiExamStatus');
-        if (status) status.textContent = `✅ Đã tạo ${lastGeneratedQuestions.length} câu hỏi. Hãy nhấn "Lưu" để hoàn tất.`;
-        
-    } catch (e) {
-        showToast('Lỗi AI: ' + e.message, 'error');
-    } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = 'Tạo từ Text'; }
-    }
-}
-
-async function generateQuizFromFile(type) {
-    const fileInput = document.getElementById('examFileAI');
-    if (!fileInput.files.length) { showToast('Hãy chọn file document!', 'warning'); return; }
-    
-    const file = fileInput.files[0];
-    const reader = new FileReader();
-    
-    reader.onload = async () => {
-        const base64Data = reader.result.split(',')[1];
-        try {
-            const data = await apiFetch('/api/it/exams/generate-from-file', {
-                method: 'POST',
-                body: JSON.stringify({ base64Data, mimeType: file.type })
-            });
-            
-            document.getElementById('examTitleInput').value = data.examTitle || 'Quiz từ File';
-            document.getElementById('examDurationInput').value = data.durationMinutes || 30;
-            
-            // Transform AI data to match ItCreateQuestionDto structure
-            lastGeneratedQuestions = (data.questions || []).map(q => ({
-                questionText: q.questionText,
-                points: q.points || 10,
-                options: (q.options || []).map((optText, idx) => ({
-                    optionText: optText,
-                    isCorrect: idx === q.correctOptionIndex
-                }))
-            }));
-            
-            showToast(`AI đã tạo ${lastGeneratedQuestions.length} câu hỏi từ file!`, 'success');
-            
-            const status = document.getElementById('aiExamStatus');
-            if (status) status.textContent = `✅ Đã tách ${lastGeneratedQuestions.length} câu từ file. Hãy nhấn "Lưu" để hoàn tất.`;
-        } catch (e) {
-            showToast('Lỗi AI: ' + e.message, 'error');
-        }
-    };
-    reader.readAsDataURL(file);
-}
-
-async function suggestQuestionWithAI() {
-    const context = document.getElementById('aiQuestionContext').value.trim();
-    if (!context) { showToast('Hãy nhập chủ đề!', 'warning'); return; }
-    
-    const btn = document.getElementById('btnSuggestQuestionAI');
-    if (btn) { btn.disabled = true; btn.innerHTML = '✨...'; }
-    
-    try {
-        const data = await apiFetch('/api/it/exams/generate', {
-            method: 'POST',
-            body: JSON.stringify({ prompt: `Tạo 1 câu hỏi trắc nghiệm liên quan đến: ${context}` })
-        });
-        
-        if (data.questions && data.questions.length > 0) {
-            const q = data.questions[0];
-            document.getElementById('qTextInput').value = q.questionText;
-            document.getElementById('qPointsInput').value = q.points;
-            
-            (q.options || []).forEach((opt, i) => {
-                const optEl = document.getElementById(`qOpt${i + 1}`);
-                if (optEl) optEl.value = opt;
-                if (i === q.correctOptionIndex) {
-                    const radios = document.getElementsByName('qCorrectOption');
-                    if (radios[i]) radios[i].checked = true;
-                }
-            });
-            showToast('AI đã gợi ý xong!', 'success');
-        }
-    } catch (e) {
-        showToast('Lỗi AI: ' + e.message, 'error');
-    } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = '💡 AI Gợi Ý'; }
-    }
-}
-
 // ============================================================
 // AI GENERATION (GEMINI)
 // ============================================================
@@ -3943,7 +4028,7 @@ async function generateModuleWithAI(source) {
 }
 
 async function generateLessonWithAI(lessonId) {
-    showToast('AI đang soạn thảo nội dung bài giảng...', 'info');
+    showToast('AI đang soạn thảo nội dung bài học...', 'info');
     try {
         const data = await apiFetch(`/api/it/lessons/${lessonId}/generate-content-ai`, { method: 'POST' });
         showToast('Soạn thảo nội dung thành công!', 'success');
@@ -4523,6 +4608,191 @@ function openCreateExamModal() {
             .catch(err => console.error(err));
     }
     openModal('libraryExamModal');
+}
+
+let currentPreviewModuleId = null;
+let currentPreviewCourseId = null;
+
+function previewModuleLessons(moduleId) {
+    const module = (documentLibraryData.modules || []).find(m => m.moduleId === moduleId);
+    if (!module) return;
+
+    currentPreviewModuleId = moduleId;
+    currentPreviewCourseId = module.courseId;
+
+    const courseTitle = module.courseTitle || 'Tài liệu hệ thống';
+    document.getElementById('previewLibraryTitle').textContent = `Xem tài liệu: ${courseTitle}`;
+
+    // Render tree structure in the left sidebar
+    renderPreviewLibraryTree(moduleId);
+
+    // Automatically select and preview the first lesson of this module if available
+    const lessons = (documentLibraryData.lessons || []).filter(l => l.moduleId === moduleId);
+    if (lessons.length > 0) {
+        selectPreviewLesson(lessons[0].lessonId);
+    } else {
+        document.getElementById('previewLibraryContent').innerHTML = `
+            <div style="text-align: center; color: #64748b; margin-top: 100px;">
+                <div style="font-size: 48px; margin-bottom: 15px;">📝</div>
+                <h4>Chương này chưa có bài học</h4>
+                <p style="font-size: 13px;">Vui lòng thêm bài học vào chương này để xem nội dung.</p>
+            </div>
+        `;
+    }
+
+    openModal('previewLibraryModal');
+}
+
+function previewLessonContent(lessonId) {
+    const lesson = (documentLibraryData.lessons || []).find(l => l.lessonId === lessonId);
+    if (!lesson) return;
+
+    // Set preview context
+    currentPreviewModuleId = lesson.moduleId;
+    const module = (documentLibraryData.modules || []).find(m => m.moduleId === lesson.moduleId);
+    currentPreviewCourseId = module ? module.courseId : null;
+
+    const courseTitle = (module && module.courseTitle) ? module.courseTitle : 'Tài liệu hệ thống';
+    document.getElementById('previewLibraryTitle').textContent = `Xem tài liệu: ${courseTitle}`;
+
+    renderPreviewLibraryTree(lesson.moduleId, lessonId);
+    selectPreviewLesson(lessonId);
+    openModal('previewLibraryModal');
+}
+
+function renderPreviewLibraryTree(activeModuleId, selectedLessonId = null) {
+    const sidebar = document.getElementById('previewLibrarySidebar');
+    if (!sidebar) return;
+
+    let targetModules = [];
+    if (currentPreviewCourseId) {
+        // If this module belongs to a course, show all modules in that course
+        targetModules = (documentLibraryData.modules || []).filter(m => m.courseId === currentPreviewCourseId);
+    } else {
+        // Otherwise, just show this single module
+        const activeModule = (documentLibraryData.modules || []).find(m => m.moduleId === activeModuleId);
+        if (activeModule) targetModules = [activeModule];
+    }
+
+    // Sort modules by sortOrder if available
+    targetModules.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+    sidebar.innerHTML = targetModules.map(m => {
+        // Get all lessons for this module
+        const mLessons = (documentLibraryData.lessons || []).filter(l => l.moduleId === m.moduleId);
+        // Sort lessons by sortOrder if available
+        mLessons.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+        const isCurrentModule = m.moduleId === activeModuleId;
+
+        const lessonsHtml = mLessons.map(l => {
+            const isSelected = l.lessonId === selectedLessonId;
+            const bg = isSelected ? '#3b82f6' : 'transparent';
+            const color = isSelected ? '#fff' : '#334155';
+            const hoverStyle = isSelected ? '' : 'onmouseover="this.style.background=\'#e2e8f0\'" onmouseout="this.style.background=\'transparent\'"';
+
+            return `
+                <div class="preview-tree-lesson" 
+                     onclick="selectPreviewLesson(${l.lessonId})" 
+                     style="padding: 6px 10px; border-radius: 6px; font-size: 12.5px; cursor: pointer; transition: all 0.2s; background: ${bg}; color: ${color}; display: flex; align-items: center; gap: 6px; margin-bottom: 2px;"
+                     ${hoverStyle}>
+                    <span>📄</span>
+                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;">${libraryEscape(l.title)}</span>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div style="margin-bottom: 15px;">
+                <div style="font-weight: 700; font-size: 13.5px; color: ${isCurrentModule ? '#1e3a8a' : '#475569'}; display: flex; align-items: center; gap: 6px; padding: 4px 0 6px 0; border-bottom: 1px solid ${isCurrentModule ? '#bfdbfe' : '#f1f5f9'}; margin-bottom: 6px;">
+                    <span>📂</span>
+                    <span>${libraryEscape(m.title)}</span>
+                </div>
+                <div style="margin-left: 10px; display: flex; flex-direction: column; gap: 2px;">
+                    ${lessonsHtml || '<div style="font-size: 11px; color: #94a3b8; padding: 4px 10px;">(Chưa có bài học)</div>'}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function selectPreviewLesson(lessonId) {
+    // Highlight active lesson in sidebar tree
+    const items = document.querySelectorAll('.preview-tree-lesson');
+    items.forEach(el => {
+        const onClickStr = el.getAttribute('onclick') || '';
+        if (!onClickStr.includes(`(${lessonId})`)) {
+            el.style.background = 'transparent';
+            el.style.color = '#334155';
+            el.setAttribute('onmouseover', "this.style.background='#e2e8f0'");
+            el.setAttribute('onmouseout', "this.style.background='transparent'");
+        } else {
+            el.style.background = '#3b82f6';
+            el.style.color = '#fff';
+            el.removeAttribute('onmouseover');
+            el.removeAttribute('onmouseout');
+        }
+    });
+
+    // Populate content area on the right
+    const lesson = (documentLibraryData.lessons || []).find(l => l.lessonId === lessonId);
+    const container = document.getElementById('previewLibraryContent');
+    if (!container || !lesson) return;
+
+    let contentHtml = `
+        <div style="margin-bottom: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
+            <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 6px;">${libraryEscape(lesson.title)}</h2>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; font-size: 12px;">
+                ${lesson.level ? `<span class="badge badge-info">Level ${lesson.level}</span>` : ''}
+                ${lesson.contentType ? `<span class="badge badge-purple">${libraryEscape(lesson.contentType)}</span>` : ''}
+            </div>
+        </div>
+    `;
+
+    // Video preview
+    if (lesson.videoUrl) {
+        contentHtml += `
+            <div style="margin-bottom: 25px;">
+                <label style="font-weight: 700; display: block; margin-bottom: 10px; color: #475569; font-size: 14px;">🎥 Video bài học:</label>
+                <video src="${lesson.videoUrl}" controls style="width: 100%; max-height: 420px; border-radius: 10px; background: #000; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);"></video>
+            </div>
+        `;
+    }
+
+    // Text content preview
+    if (lesson.contentBody) {
+        contentHtml += `
+            <div style="margin-bottom: 25px; padding: 20px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
+                <label style="font-weight: 700; display: block; margin-bottom: 12px; color: #475569; font-size: 14px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">📝 Nội dung bài học:</label>
+                <div class="lesson-content-rich" style="font-size: 14px; color: #334155; line-height: 1.7;">${lesson.contentBody}</div>
+            </div>
+        `;
+    } else if (!lesson.videoUrl) {
+        contentHtml += `
+            <div style="margin-bottom: 25px; padding: 25px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; text-align: center; color: #64748b;">
+                Bài học này chưa có nội dung chi tiết.
+            </div>
+        `;
+    }
+
+    // Attachments
+    if (lesson.attachments && lesson.attachments.length) {
+        contentHtml += `
+            <div style="margin-bottom: 15px;">
+                <label style="font-weight: 700; display: block; margin-bottom: 10px; color: #475569; font-size: 14px;">📁 Tài liệu đính kèm:</label>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    ${lesson.attachments.map(a => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #f1f5f9; border-radius: 8px; border: 1px solid #e2e8f0;">
+                            <span style="font-size: 13px; color: #334155; display: flex; align-items: center; gap: 8px;">📄 ${libraryEscape(a.fileName)}</span>
+                            <a href="${a.filePath}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration: none; padding: 5px 10px; font-size: 12px; font-weight: 600;">Tải về</a>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = contentHtml;
 }
 
 document.addEventListener('DOMContentLoaded', init);

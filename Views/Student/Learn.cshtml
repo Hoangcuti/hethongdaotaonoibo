@@ -350,7 +350,7 @@
                     </div>
                     <!-- Toggle Video/Doc -->
                     <div id="videoDocToggle" style="display:none; gap: 4px; background: rgba(99,102,241,0.05); padding: 4px; border-radius: 12px; border: 1px solid rgba(99,102,241,0.1);">
-                        <button type="button" class="btn" id="btnShowVideo" onclick="switchVideoDocMode('video')" style="padding: 6px 16px; font-size: 12px; font-weight: 800; border-radius: 8px; border:0; cursor:pointer; background: linear-gradient(135deg, var(--brand), var(--brand-dark)); color:#fff; box-shadow: 0 4px 10px rgba(99,102,241,0.2);">🎥 Video bài giảng</button>
+                        <button type="button" class="btn" id="btnShowVideo" onclick="switchVideoDocMode('video')" style="padding: 6px 16px; font-size: 12px; font-weight: 800; border-radius: 8px; border:0; cursor:pointer; background: linear-gradient(135deg, var(--brand), var(--brand-dark)); color:#fff; box-shadow: 0 4px 10px rgba(99,102,241,0.2);">🎥 Video bài học</button>
                         <button type="button" class="btn" id="btnShowDoc" onclick="switchVideoDocMode('doc')" style="padding: 6px 16px; font-size: 12px; font-weight: 800; border-radius: 8px; border:0; cursor:pointer; background:transparent; color:var(--muted); box-shadow:none;">🔗 Xem Tài liệu</button>
                     </div>
                 </div>
@@ -752,7 +752,7 @@ async function playLesson(id) {
         // Đối với video Google Drive, không thể track tiến độ xem qua iframe nên cho phép hoàn thành ngay lập tức
         btn.disabled = false;
         btn.style.opacity = '1';
-        btn.innerHTML = lesson.isCompleted ? 'Tiếp tục bài tiếp →' : 'Hoàn thành bài giảng';
+        btn.innerHTML = lesson.isCompleted ? 'Tiếp tục bài tiếp →' : 'Hoàn thành bài học';
     } else if (!lesson.isCompleted) {
         btn.disabled = true;
         btn.style.opacity = '0.5';
@@ -953,7 +953,7 @@ async function playLesson(id) {
     } else if (attachments.length > 0) {
         if (toggleEl) toggleEl.style.display = 'none';
 
-        // Hiển thị trực tiếp danh sách tài liệu nếu bài giảng không có video
+        // Hiển thị trực tiếp danh sách tài liệu nếu bài học không có video
         host.innerHTML = `
             <div style="padding: 20px 0; text-align:left;">
                 <div style="margin-bottom:20px; font-size:14px; color:var(--muted); font-weight:600;">📁 TÀI LIỆU HỌC TẬP ĐÍNH KÈM:</div>
@@ -1118,7 +1118,7 @@ async function markLessonComplete(isAuto = false) {
             }
             
             document.getElementById('kpiDone').textContent = flatLessons.filter(l => l.isCompleted).length;
-            showToast('Chúc mừng! Bạn đã hoàn thành bài giảng.', 'success');
+            showToast('Chúc mừng! Bạn đã hoàn thành bài học.', 'success');
             renderSidebar();
             btn.innerHTML = 'Tiếp tục bài tiếp →';
             btn.disabled = false;
