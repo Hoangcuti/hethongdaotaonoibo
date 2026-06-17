@@ -192,17 +192,27 @@
             box-shadow: var(--shadow-focus);
         }
 
-        .password-toggle {
-            position: absolute;
-            right: 14px; top: 50%;
-            transform: translateY(-50%);
+        .show-password-wrap {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 8px;
+        }
+
+        .show-password-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--color-text-secondary);
             cursor: pointer;
-            font-size: 16px;
-            color: var(--color-text-muted);
-            background: none;
-            border: none;
-            padding: 0;
-            display: flex; align-items: center;
+            user-select: none;
+        }
+
+        .show-password-label input[type="checkbox"] {
+            cursor: pointer;
+            width: 15px;
+            height: 15px;
+            accent-color: var(--color-primary);
         }
 
         .error-alert {
@@ -340,9 +350,9 @@
             </div>
 
             <div class="roles-preview">
-                <div class="role-chip">👤 Học viên</div>
-                <div class="role-chip">💻 IT Admin</div>
-                <div class="role-chip">👥 Nhân sự</div>
+                <div class="role-chip"> Học viên</div>
+                <div class="role-chip"> IT Admin</div>
+                <div class="role-chip"> Nhân sự</div>
             </div>
 
             <div class="stats-row">
@@ -364,7 +374,7 @@
 
     <div class="right-panel">
         <div class="login-header" id="login-header">
-            <h1 id="login-title">Chào mừng trở lại 👋</h1>
+            <h1 id="login-title">Chào mừng trở lại</h1>
             <p id="login-subtitle">Đăng nhập để tiếp tục hành trình học tập của bạn</p>
         </div>
 
@@ -379,7 +389,7 @@
             <div class="form-group">
                 <label class="form-label" for="username">Tên đăng nhập</label>
                 <div class="input-wrap">
-                    <span class="input-icon">👤</span>
+                    <span class="input-icon"></span>
                     <input type="text" id="username" name="username" class="form-input"
                            placeholder="Nhập tên đăng nhập" autocomplete="username" required 
                            onblur="fetchDeptInfo()"/>
@@ -389,10 +399,15 @@
             <div class="form-group">
                 <label class="form-label" for="password">Mật khẩu</label>
                 <div class="input-wrap">
-                    <span class="input-icon">🔒</span>
+                    <span class="input-icon"></span>
                     <input type="password" id="password" name="password" class="form-input"
                            placeholder="Nhập mật khẩu" autocomplete="current-password" required />
-                    <button type="button" class="password-toggle" onclick="togglePassword()" id="togglePwdBtn" aria-label="Hiển thị mật khẩu">👁️</button>
+                </div>
+                <div class="show-password-wrap">
+                    <label class="show-password-label">
+                        <input type="checkbox" id="showPasswordToggle" onclick="togglePassword()" />
+                        <span>Hiển thị mật khẩu</span>
+                    </label>
                 </div>
             </div>
 
@@ -448,16 +463,8 @@
     <script>
         function togglePassword() {
             const pwd = document.getElementById('password');
-            const btn = document.getElementById('togglePwdBtn');
-            if (pwd.type === 'password') {
-                pwd.type = 'text';
-                btn.textContent = '🙈';
-                btn.setAttribute('aria-label', 'Ẩn mật khẩu');
-            } else {
-                pwd.type = 'password';
-                btn.textContent = '👁️';
-                btn.setAttribute('aria-label', 'Hiển thị mật khẩu');
-            }
+            const chk = document.getElementById('showPasswordToggle');
+            pwd.type = chk.checked ? 'text' : 'password';
         }
 
         // Đgradient NÂNG CẤP JS: Xử lý chữ động mượt mà, không lỗi thẻ IMG
