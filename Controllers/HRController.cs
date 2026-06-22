@@ -3721,6 +3721,38 @@ public class HRController : Controller
         doc.ApprovedAt = DateTime.Now;
 
         await _db.SaveChangesAsync();
+
+        // Send notification to proposer
+        try {
+            var proposerId = doc.CreatedBy;
+            if (proposerId.HasValue)
+            {
+                var notifTitle = $"[PHÊ DUYỆT - ID:{doc.Id}] Đề xuất '{doc.Title}' của bạn đã được phê duyệt.";
+                if (notifTitle.Length > 255)
+                {
+                    notifTitle = notifTitle.Substring(0, 252) + "...";
+                }
+
+                int nextNotifId = 1;
+                if (await _db.Notifications.AnyAsync())
+                {
+                    nextNotifId = await _db.Notifications.MaxAsync(n => n.Id) + 1;
+                }
+
+                var notification = new Notification
+                {
+                    Id = nextNotifId,
+                    UserId = proposerId.Value,
+                    Title = notifTitle,
+                    IsRead = false
+                };
+                _db.Notifications.Add(notification);
+                await _db.SaveChangesAsync();
+            }
+        } catch (Exception) {
+            // Prevent notification errors from blocking response
+        }
+
         return Ok(new { success = true });
     }
 
