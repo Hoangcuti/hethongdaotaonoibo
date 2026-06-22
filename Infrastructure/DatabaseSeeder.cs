@@ -29,6 +29,13 @@ public static class DatabaseSeeder
         // Nếu dữ liệu đã có phòng ban hoặc người dùng, bỏ qua không gieo tự động
         if (await context.Departments.AnyAsync() || await context.Users.AnyAsync())
         {
+            // One-time patch: update lanhhgv0001 FullName to "Phòng Đào tạo"
+            var targetUser = await context.Users.FirstOrDefaultAsync(u => u.Username == "lanhhgv0001");
+            if (targetUser != null && targetUser.FullName != "Phòng Đào tạo")
+            {
+                targetUser.FullName = "Phòng Đào tạo";
+                await context.SaveChangesAsync();
+            }
             return;
         }
 

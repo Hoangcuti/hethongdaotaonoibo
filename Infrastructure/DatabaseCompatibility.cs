@@ -16,6 +16,12 @@ END;
 IF COL_LENGTH('dbo.Courses', 'Level') IS NULL
     ALTER TABLE dbo.Courses ADD Level INT NULL;
 
+IF COL_LENGTH('dbo.Courses', 'StartDate') IS NULL
+    ALTER TABLE dbo.Courses ADD StartDate DATETIME NULL;
+
+IF COL_LENGTH('dbo.Courses', 'EndDate') IS NULL
+    ALTER TABLE dbo.Courses ADD EndDate DATETIME NULL;
+
 IF COL_LENGTH('dbo.CourseModules', 'Level') IS NULL
     ALTER TABLE dbo.CourseModules ADD Level INT NULL;
 
@@ -194,5 +200,36 @@ IF COL_LENGTH('dbo.QuestionBank', 'QuestionType') IS NULL
 
 IF COL_LENGTH('dbo.UserAnswers', 'TextResponse') IS NULL
     ALTER TABLE dbo.UserAnswers ADD TextResponse NVARCHAR(MAX) NULL;
+
+-- Clean up old soft-deleted courses and their related data
+IF OBJECT_ID('tempdb..#DeletedCourseIDs') IS NOT NULL DROP TABLE #DeletedCourseIDs;
+SELECT CourseID INTO #DeletedCourseIDs FROM dbo.Courses WHERE Status = 'Deleted';
+
+IF EXISTS (SELECT 1 FROM #DeletedCourseIDs)
+BEGIN
+    DELETE FROM dbo.UserAnswers WHERE UserExamID IN (SELECT UserExamID FROM dbo.UserExams WHERE ExamID IN (SELECT ExamID FROM dbo.Exams WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs)));
+    DELETE FROM dbo.QuizSessionStates WHERE UserExamID IN (SELECT UserExamID FROM dbo.UserExams WHERE ExamID IN (SELECT ExamID FROM dbo.Exams WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs)));
+    DELETE FROM dbo.UserExams WHERE ExamID IN (SELECT ExamID FROM dbo.Exams WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs));
+    DELETE FROM dbo.ExamQuestions WHERE ExamID IN (SELECT ExamID FROM dbo.Exams WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs));
+    DELETE FROM dbo.Exams WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs);
+
+    DELETE FROM dbo.UserLessonLogs WHERE LessonID IN (SELECT LessonID FROM dbo.Lessons WHERE ModuleID IN (SELECT ModuleID FROM dbo.CourseModules WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs)));
+    DELETE FROM dbo.LessonAttachments WHERE LessonID IN (SELECT LessonID FROM dbo.Lessons WHERE ModuleID IN (SELECT ModuleID FROM dbo.CourseModules WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs)));
+    DELETE FROM dbo.Lessons WHERE ModuleID IN (SELECT ModuleID FROM dbo.CourseModules WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs));
+    DELETE FROM dbo.CourseModules WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs);
+
+    DELETE FROM dbo.Enrollments WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs);
+    DELETE FROM dbo.Certificates WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs);
+    DELETE FROM dbo.CourseFeedback WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs);
+    DELETE FROM dbo.CourseCosts WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs);
+    DELETE FROM dbo.PathCourses WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs);
+    DELETE FROM dbo.TrainingAssignments WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs);
+
+    DELETE FROM dbo.AttendanceLogs WHERE EventID IN (SELECT EventID FROM dbo.OfflineTrainingEvents WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs));
+    DELETE FROM dbo.OfflineTrainingEvents WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs);
+    DELETE FROM dbo.DocumentLibrary WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs);
+
+    DELETE FROM dbo.Courses WHERE CourseID IN (SELECT CourseID FROM #DeletedCourseIDs);
+END;
 """;
 }

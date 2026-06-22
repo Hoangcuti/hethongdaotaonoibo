@@ -146,6 +146,12 @@ public partial class ITController : Controller
         course.IsMandatory = dto.IsMandatory;
         course.StartDate = dto.StartDate;
         course.EndDate = dto.EndDate;
+        
+        var assignments = await _db.TrainingAssignments.Where(ta => ta.CourseId == id).ToListAsync();
+        foreach (var ta in assignments)
+        {
+            ta.DueDate = dto.EndDate;
+        }
         course.TargetDepartmentId = dto.TargetDepartmentIds != null && dto.TargetDepartmentIds.Any() ? dto.TargetDepartmentIds.First() : null;
         course.TargetDepartmentIds = dto.TargetDepartmentIds != null ? string.Join(",", dto.TargetDepartmentIds) : null;
 
@@ -1916,12 +1922,363 @@ public partial class ITController : Controller
             return StatusCode(500, new { error = "Lỗi khi lưu cấu trúc bài thi: " + ex.Message });
         }
     }
+
+    private int GetCurrentUserId() =>
+        int.Parse(HttpContext.Session.GetString("UserID") ?? "0");
+
+    private int GetCurrentDeptId() =>
+        int.Parse(HttpContext.Session.GetString("DepartmentID") ?? "0");
+
+    private async Task<string> GenerateUniqueCourseCode(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            title = "Course";
+        }
+
+        string cleanTitle = title.Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder();
+        foreach (var c in cleanTitle)
+        {
+            var uc = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+            if (uc != System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                sb.Append(c);
+            }
+        }
+        string asciiTitle = sb.ToString().Replace("đ", "d").Replace("Đ", "D");
+
+        var words = asciiTitle.Split(new[] { ' ', '-', '_', '/' }, StringSplitOptions.RemoveEmptyEntries);
+        var initialsBuilder = new System.Text.StringBuilder();
+        foreach (var w in words)
+        {
+            if (w.Length > 0 && char.IsLetterOrDigit(w[0]))
+            {
+                initialsBuilder.Append(char.ToUpper(w[0]));
+            }
+        }
+
+        string prefix = initialsBuilder.ToString();
+        if (string.IsNullOrWhiteSpace(prefix))
+        {
+            prefix = "CRSE";
+        }
+        
+        if (prefix.Length > 6)
+        {
+            prefix = prefix.Substring(0, 6);
+        }
+
+        int counter = 101;
+        string candidateCode = $"{prefix}{counter}";
+        while (await _db.Courses.AnyAsync(c => c.CourseCode == candidateCode))
+        {
+            counter++;
+            candidateCode = $"{prefix}{counter}";
+        }
+
+        return candidateCode;
+    }
+
+    [HttpPost("/api/it/ai-create-course-from-word")]
+    public async Task<IActionResult> CreateCourseFromWord([FromBody] ImportCourseFileDto dto)
+    {
+        var auth = RequireIT();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        int deptId = GetCurrentDeptId();
+        if (string.IsNullOrEmpty(dto.Base64Data)) return BadRequest("Dữ liệu file trống.");
+
+        try
+        {
+            byte[] fileBytes = Convert.FromBase64String(dto.Base64Data);
+            string wordText = "";
+
+            using (var ms = new System.IO.MemoryStream(fileBytes))
+            {
+                using (var doc = Xceed.Words.NET.DocX.Load(ms))
+                {
+                    var linesList = new List<string>();
+                    foreach (var p in doc.Paragraphs)
+                    {
+                        var t = p.Text.Trim();
+                        if (!string.IsNullOrEmpty(t)) linesList.Add(t);
+                    }
+                    foreach (var table in doc.Tables)
+                    {
+                        foreach (var row in table.Rows)
+                        {
+                            foreach (var cell in row.Cells)
+                            {
+                                foreach (var p in cell.Paragraphs)
+                                {
+                                    var t = p.Text.Trim();
+                                    if (!string.IsNullOrEmpty(t)) linesList.Add(t);
+                                }
+                            }
+                        }
+                    }
+                    wordText = string.Join("\n", linesList);
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(wordText))
+            {
+                return BadRequest("Không trích xuất được nội dung từ file Word.");
+            }
+
+            var generatedData = await _aiService.GenerateCourseFromWordTextAsync(wordText);
+
+            var course = new Course
+            {
+                Title = generatedData.Title,
+                Description = generatedData.Description,
+                CourseCode = await GenerateUniqueCourseCode(generatedData.Title),
+                OwnerDepartmentId = deptId,
+                TargetDepartmentId = deptId,
+                IsMandatory = false,
+                Status = "Published",
+                CreatedAt = DateTime.Now,
+                CreatedBy = GetCurrentUserId()
+            };
+            _db.Courses.Add(course);
+            await _db.SaveChangesAsync();
+
+            int moduleOrder = 1;
+            foreach (var mod in generatedData.Modules)
+            {
+                var module = new CourseModule
+                {
+                    CourseId = course.CourseId,
+                    Title = mod.Title,
+                    SortOrder = moduleOrder++
+                };
+                _db.CourseModules.Add(module);
+                await _db.SaveChangesAsync();
+
+                int lessonOrder = 1;
+                var lessonContents = new StringBuilder();
+                foreach (var lessonData in mod.Lessons)
+                {
+                    var lesson = new Lesson
+                    {
+                        ModuleId = module.ModuleId,
+                        Title = lessonData.Title,
+                        ContentType = "Document",
+                        ContentBody = lessonData.ContentBody,
+                        SortOrder = lessonOrder++
+                    };
+                    _db.Lessons.Add(lesson);
+                    lessonContents.AppendLine($"<h3>{lessonData.Title}</h3>");
+                    lessonContents.AppendLine(lessonData.ContentBody);
+                }
+                await _db.SaveChangesAsync();
+
+                // Sinh quiz tự động cho chương này nếu có bài học
+                if (mod.Lessons.Count > 0)
+                {
+                    try
+                    {
+                        var quizData = await _aiService.GenerateQuizFromLessonsAsync(mod.Title, lessonContents.ToString());
+                        var exam = new Exam
+                        {
+                            CourseId = course.CourseId,
+                            ModuleId = module.ModuleId,
+                            ExamTitle = quizData.ExamTitle,
+                            DurationMinutes = quizData.DurationMinutes,
+                            PassScore = 80,
+                            MaxAttempts = 3,
+                            StartDate = DateTime.Now,
+                            EndDate = DateTime.Now.AddYears(1),
+                            TargetDepartmentId = deptId
+                        };
+                        _db.Exams.Add(exam);
+                        await _db.SaveChangesAsync();
+
+                        foreach (var qDto in quizData.Questions)
+                        {
+                            var question = new QuestionBank
+                            {
+                                QuestionText = qDto.QuestionText,
+                                QuestionType = qDto.QuestionType,
+                                Difficulty = "Medium"
+                            };
+                            _db.QuestionBanks.Add(question);
+                            await _db.SaveChangesAsync();
+
+                            if (qDto.QuestionType == "MultipleChoice")
+                            {
+                                foreach (var optDto in qDto.Options)
+                                {
+                                    var option = new QuestionOption
+                                    {
+                                        QuestionId = question.QuestionId,
+                                        OptionText = optDto.OptionText,
+                                        IsCorrect = optDto.IsCorrect
+                                    };
+                                    _db.QuestionOptions.Add(option);
+                                }
+                            }
+                            else if (qDto.QuestionType == "FillInTheBlank")
+                            {
+                                var option = new QuestionOption
+                                {
+                                    QuestionId = question.QuestionId,
+                                    OptionText = qDto.Options.Count > 0 ? qDto.Options[0].OptionText : "",
+                                    IsCorrect = true
+                                };
+                                _db.QuestionOptions.Add(option);
+                            }
+
+                            var eq = new ExamQuestion
+                            {
+                                ExamId = exam.ExamId,
+                                QuestionId = question.QuestionId,
+                                Points = qDto.Points
+                            };
+                            _db.ExamQuestions.Add(eq);
+                        }
+                        await _db.SaveChangesAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError($"Lỗi tự động sinh quiz cho chương {mod.Title}: {ex.Message}");
+                    }
+                }
+            }
+
+            return Ok(new { success = true, courseId = course.CourseId, title = course.Title, code = course.CourseCode });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi nhập khóa học từ Word: " + ex.Message });
+        }
+    }
+
+    [HttpPost("/api/it/generate-quiz-from-course")]
+    public async Task<IActionResult> GenerateQuizFromCourse([FromBody] GenerateQuizFromCourseDto dto)
+    {
+        var auth = RequireIT();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        var course = await _db.Courses.FirstOrDefaultAsync(c => c.CourseId == dto.CourseId);
+        if (course == null) return NotFound("Không tìm thấy khóa học.");
+
+        try
+        {
+            var lessonsQuery = _db.Lessons.AsQueryable();
+            string titlePrefix = course.Title ?? "Khóa học";
+
+            if (dto.ModuleId.HasValue && dto.ModuleId.Value > 0)
+            {
+                var mod = await _db.CourseModules.FirstOrDefaultAsync(m => m.ModuleId == dto.ModuleId.Value);
+                if (mod == null) return NotFound("Không tìm thấy chương học.");
+                lessonsQuery = lessonsQuery.Where(l => l.ModuleId == dto.ModuleId.Value);
+                titlePrefix = mod.Title ?? titlePrefix;
+            }
+            else
+            {
+                var moduleIds = await _db.CourseModules.Where(m => m.CourseId == dto.CourseId).Select(m => m.ModuleId).ToListAsync();
+                lessonsQuery = lessonsQuery.Where(l => l.ModuleId != null && moduleIds.Contains(l.ModuleId.Value));
+            }
+
+            var lessons = await lessonsQuery.ToListAsync();
+            if (lessons.Count == 0)
+            {
+                return BadRequest("Không có bài học nào trong khóa học/chương học này để quét nội dung.");
+            }
+
+            var lessonContents = new StringBuilder();
+            foreach (var l in lessons)
+            {
+                lessonContents.AppendLine($"<h3>{l.Title}</h3>");
+                lessonContents.AppendLine(l.ContentBody);
+            }
+
+            var quizData = await _aiService.GenerateQuizFromLessonsAsync(titlePrefix, lessonContents.ToString());
+
+            // Lưu bài thi vào hệ thống
+            var exam = new Exam
+            {
+                CourseId = dto.CourseId,
+                ModuleId = dto.ModuleId,
+                ExamTitle = quizData.ExamTitle,
+                DurationMinutes = quizData.DurationMinutes,
+                PassScore = 80,
+                MaxAttempts = 3,
+                StartDate = DateTime.Now,
+                EndDate = DateTime.Now.AddYears(1),
+                TargetDepartmentId = course.TargetDepartmentId
+            };
+            _db.Exams.Add(exam);
+            await _db.SaveChangesAsync();
+
+            foreach (var qDto in quizData.Questions)
+            {
+                var question = new QuestionBank
+                {
+                    QuestionText = qDto.QuestionText,
+                    QuestionType = qDto.QuestionType,
+                    Difficulty = "Medium"
+                };
+                _db.QuestionBanks.Add(question);
+                await _db.SaveChangesAsync();
+
+                if (qDto.QuestionType == "MultipleChoice")
+                {
+                    foreach (var optDto in qDto.Options)
+                    {
+                        var option = new QuestionOption
+                        {
+                            QuestionId = question.QuestionId,
+                            OptionText = optDto.OptionText,
+                            IsCorrect = optDto.IsCorrect
+                        };
+                        _db.QuestionOptions.Add(option);
+                    }
+                }
+                else if (qDto.QuestionType == "FillInTheBlank")
+                {
+                    var option = new QuestionOption
+                    {
+                        QuestionId = question.QuestionId,
+                        OptionText = qDto.Options.Count > 0 ? qDto.Options[0].OptionText : "",
+                        IsCorrect = true
+                    };
+                    _db.QuestionOptions.Add(option);
+                }
+
+                var eq = new ExamQuestion
+                {
+                    ExamId = exam.ExamId,
+                    QuestionId = question.QuestionId,
+                    Points = qDto.Points
+                };
+                _db.ExamQuestions.Add(eq);
+            }
+            await _db.SaveChangesAsync();
+
+            return Ok(new { success = true, examId = exam.ExamId, examTitle = exam.ExamTitle });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi tự động sinh quiz: " + ex.Message });
+        }
+    }
+
+    [HttpPost("/api/it/generate-test-files")]
+    public IActionResult GenerateTestFiles()
+    {
+        return Ok(new { success = true, message = "Các file mẫu đã được chuẩn bị sẵn trong thư mục wwwroot/sample-data/" });
+    }
 }
 // DTOs
-public class RejectDocumentDto
+public class GenerateQuizFromCourseDto
 {
-    public string? Reason { get; set; }
+    public int CourseId { get; set; }
+    public int? ModuleId { get; set; }
 }
+
 public class CreateUserDto
 {
     public string Username { get; set; } = "";
@@ -1996,6 +2353,7 @@ public class ItCreateExamDto
 public class ItCreateQuestionDto
 {
     public string QuestionText { get; set; } = "";
+    public string? QuestionType { get; set; }
     public decimal Points { get; set; } = 10;
     public List<ItCreateOptionDto>? Options { get; set; }
 }
@@ -2053,36 +2411,7 @@ public class JobTitleDto
     public string TitleName { get; set; } = "";
     public int? GradeLevel { get; set; }
 }
-public class PendingLessonData
-{
-    public string Title { get; set; } = "";
-    public int? ModuleId { get; set; }
-    public string? NewModuleName { get; set; }
-    public string ContentType { get; set; } = "Document";
-    public string? ContentBody { get; set; }
-    public string? VideoUrl { get; set; }
-    public int? Level { get; set; }
-}
-public class PendingExamData
-{
-    public string ExamTitle { get; set; } = "";
-    public int DurationMinutes { get; set; }
-    public decimal PassScore { get; set; }
-    public int? MaxAttempts { get; set; }
-    public int? Level { get; set; }
-    public List<PendingQuestionData>? Questions { get; set; }
-}
-public class PendingQuestionData
-{
-    public string QuestionText { get; set; } = "";
-    public string QuestionType { get; set; } = "MultipleChoice";
-    public List<PendingOptionData>? Options { get; set; }
-}
-public class PendingOptionData
-{
-    public string OptionText { get; set; } = "";
-    public bool IsCorrect { get; set; }
-}
+
 
 public class PromptFileDto
 {

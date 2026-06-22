@@ -12,39 +12,51 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="~/css/dashboard.css" />
     <script src="~/js/app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         html, body { font-family: 'Manrope', sans-serif; }
         .student-main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow-y: auto; overflow-x: hidden; position: relative; }
-        .hero-strip { background: color-mix(in srgb, var(--color-surface) 80%, transparent); border-bottom: 1px solid var(--border-color); padding: 20px 28px; display: flex; justify-content: space-between; gap: 16px; align-items: center; position: sticky; top: 0; z-index: 100; backdrop-filter: blur(20px); box-shadow: var(--shadow-xs); }
-        .hero-date { color: var(--color-text-secondary); font-size: 13px; font-weight: 600; text-align: right; }
-        .student-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; }
-        .course-grid, .event-grid, .survey-grid, .notif-grid, .badge-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
-        .course-card h3, .event-card h3, .survey-card h3, .notif-card h3, .badge-card h3 { font-size: 16px; margin-bottom: 8px; font-weight: 700; color: var(--color-text); }
-        .meta-line { color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
+        .hero-strip { background: linear-gradient(90deg, rgba(255,255,255,.9), rgba(214,240,255,.85)); border-bottom: 1px solid var(--border); padding: 18px 28px; display: flex; justify-content: space-between; gap: 16px; align-items: center; position: sticky; top: 0; z-index: 100; backdrop-filter: blur(10px); }
+        .hero-date { color: var(--text-secondary); font-size: 13px; font-weight: 600; text-align: right; }
+        .student-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; }
+        .course-grid, .event-grid, .survey-grid, .notif-grid, .badge-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+        .course-card, .event-card, .survey-card, .notif-card, .badge-card, .schedule-item, .rank-item, .info-item { border: 1px solid var(--border); border-radius: 16px; background: rgba(255,255,255,.9); padding: 16px; }
+        .course-card h3, .event-card h3, .survey-card h3, .notif-card h3, .badge-card h3 { font-size: 16px; margin-bottom: 8px; }
+        .meta-line { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
         .schedule-list, .rank-list, .info-list, .timeline-mini { display: grid; gap: 12px; }
         .schedule-item { display: grid; grid-template-columns: 110px 1fr; gap: 14px; }
-        .schedule-day { font-size: 12px; font-weight: 800; color: var(--color-primary); text-transform: uppercase; }
-        .calendar-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:18px 20px; border-bottom:1px solid var(--border-color); flex-wrap:wrap; }
+        .schedule-day { font-size: 12px; font-weight: 800; color: var(--primary); text-transform: uppercase; }
+        .calendar-shell { border: 1px solid var(--border); border-radius: 20px; background: rgba(255,255,255,.96); overflow: hidden; }
+        .calendar-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:18px 20px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
         .calendar-nav, .calendar-views { display:flex; gap:12px; align-items:center; }
-        .calendar-title { font-size:22px; font-weight:800; color:var(--color-text); }
+        .calendar-btn { border:none; border-radius:12px; background:#24364d; color:#fff; font:inherit; font-weight:700; padding:12px 16px; cursor:pointer; }
+        .calendar-btn.secondary { background:#64748b; }
+        .calendar-btn.ghost { background:#e2e8f0; color:#0f172a; }
+        .calendar-title { font-size:24px; font-weight:800; color:#0f172a; }
         .calendar-grid { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); }
-        .calendar-cell { min-height:120px; border-right:1px solid var(--border-soft); border-bottom:1px solid var(--border-soft); padding:10px; position:relative; background:var(--color-surface); }
+        .calendar-head { padding:12px 8px; text-align:center; font-size:13px; font-weight:800; color:#0f172a; border-bottom:1px solid var(--border); }
+        .calendar-cell { min-height:120px; border-right:1px solid rgba(15,23,42,.08); border-bottom:1px solid rgba(15,23,42,.08); padding:10px; position:relative; background:#fff; }
         .calendar-cell:nth-child(7n) { border-right:none; }
-        .calendar-cell.muted { background:var(--color-surface-soft); color:var(--color-text-muted); }
-        .calendar-cell.today { background:color-mix(in srgb, var(--color-primary-soft) 40%, var(--color-surface)); }
-        .calendar-day-number { font-size:14px; font-weight:800; margin-bottom:8px; display:flex; justify-content:flex-end; color: var(--color-text); }
-        .calendar-event { font-size:11px; line-height:1.35; padding:6px 8px; border-radius:10px; margin-bottom:6px; background:var(--color-primary-soft); color:var(--color-primary); font-weight:700; }
-        .calendar-event.exam { background:var(--color-danger-soft); color:var(--color-danger); }
-        .calendar-event.more { background:var(--color-surface-soft); color:var(--color-text-secondary); }
-        .timeline-mini-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--border-soft); }
+        .calendar-cell.muted { background:#f8fafc; color:#94a3b8; }
+        .calendar-cell.today { background:#fff9db; }
+        .calendar-day-number { font-size:14px; font-weight:800; margin-bottom:8px; display:flex; justify-content:flex-end; }
+        .calendar-event { font-size:11px; line-height:1.35; padding:6px 8px; border-radius:10px; margin-bottom:6px; background:#dbeafe; color:#1d4ed8; font-weight:700; }
+        .calendar-event.exam { background:#fee2e2; color:#b91c1c; }
+        .calendar-event.more { background:#e2e8f0; color:#334155; }
+        .timeline-mini-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid rgba(15,23,42,.06); }
         .timeline-mini-item:last-child { border-bottom: none; }
-        .timeline-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--color-primary); margin-top: 6px; flex-shrink: 0; }
+        .timeline-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--primary); margin-top: 6px; flex-shrink: 0; }
+        .field, .textarea { width: 100%; border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px; font: inherit; background: #fff; }
+        .textarea { min-height: 130px; resize: vertical; }
+        .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+        .wide { grid-column: 1 / -1; }
         .stars { display: flex; gap: 8px; font-size: 24px; }
         .star { cursor: pointer; opacity: .35; }
         .star.active { opacity: 1; }
+        .modal-card { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; }
         .student-hero-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
         @@media (max-width: 1100px) { .student-grid { grid-template-columns: 1fr; } }
-        @@media (max-width: 760px) { .schedule-item { grid-template-columns: 1fr; } .hero-strip { padding: 16px 18px; } .content-area { padding: 18px; } }
+        @@media (max-width: 760px) { .form-grid, .schedule-item { grid-template-columns: 1fr; } .hero-strip { padding: 16px 18px; } .content-area { padding: 18px; } }
     </style>
 </head>
 <body data-role="Student">
@@ -80,8 +92,6 @@
                 <div class="nav-section-label">Kết quả & đánh giá</div>
                 <div class="nav-item"><a class="nav-link" href="#" data-page="exam-history"><span class="nav-icon">📝</span><span>Lịch sử thi</span></a></div>
                 <div class="nav-item"><a class="nav-link" href="#" data-page="certificates"><span class="nav-icon">🏅</span><span>Chứng chỉ</span></a></div>
-                <div class="nav-item"><a class="nav-link" href="#" data-page="achievements"><span class="nav-icon">⭐</span><span>Thành tích</span></a></div>
-                <div class="nav-item"><a class="nav-link" href="#" data-page="surveys"><span class="nav-icon">📋</span><span>Khảo sát</span></a></div>
                 <div class="nav-section-label">Tài khoản</div>
                 <div class="nav-item"><a class="nav-link" href="#" data-page="notifications"><span class="nav-icon">🔔</span><span>Thông báo</span><span class="nav-badge" id="notifBadge">0</span></a></div>
                 <div class="nav-item"><a class="nav-link" href="#" data-page="profile"><span class="nav-icon">👤</span><span>Hồ sơ cá nhân</span></a></div>
@@ -132,8 +142,6 @@
                 </section>
                 <section class="page-section" id="exam-history" style="display:none"><div class="card"><div class="card-header"><div><div class="card-title">Lịch sử thi</div><div class="card-subtitle">Kết quả các bài kiểm tra đã thực hiện.</div></div></div><div class="card-body"><div class="table-wrapper"><table class="lms-table"><thead><tr><th>Bài kiểm tra</th><th>Khóa học</th><th>Kết quả (%)</th><th>Trạng thái</th><th>Thời gian</th><th>Hành động</th></tr></thead><tbody id="examHistoryBody"></tbody></table></div></div></div></section>
                 <section class="page-section" id="certificates" style="display:none"><div class="card"><div class="card-header"><div><div class="card-title">Chứng chỉ</div><div class="card-subtitle">Danh sách chứng chỉ đã nhận.</div></div></div><div class="card-body"><div class="course-grid" id="certificatesList"></div></div></div></section>
-                <section class="page-section" id="achievements" style="display:none"><div class="student-grid"><div class="card"><div class="card-header"><div><div class="card-title">Huy hiệu & điểm thưởng</div><div class="card-subtitle">Các mốc thành tích cá nhân.</div></div></div><div class="card-body"><div class="stats-grid" id="achievementStats"></div><div class="badge-grid" id="badgesList"></div></div></div><div class="card"><div class="card-header"><div><div class="card-title">Bảng xếp hạng</div><div class="card-subtitle">Top điểm số hiện tại.</div></div></div><div class="card-body rank-list" id="leaderboardList"></div></div></div></section>
-                <section class="page-section" id="surveys" style="display:none"><div class="card"><div class="card-header"><div><div class="card-title">Khảo sát</div><div class="card-subtitle">Hoàn thành khảo sát còn hiệu lực.</div></div></div><div class="card-body"><div class="survey-grid" id="surveysList"></div></div></div></section>
                 <section class="page-section" id="notifications" style="display:none"><div class="card"><div class="card-header"><div><div class="card-title">Thông báo</div><div class="card-subtitle">Danh sách thông báo gần đây.</div></div><button class="btn btn-secondary btn-sm" type="button" onclick="markAllNotifRead()">Đánh dấu đã đọc tất cả</button></div><div class="card-body"><div class="notif-grid" id="notificationsList"></div></div></div></section>
                 <section class="page-section" id="profile" style="display:none"><div class="student-grid"><div class="card"><div class="card-header"><div><div class="card-title">Hồ sơ cá nhân</div><div class="card-subtitle">Cập nhật họ tên và email.</div></div></div><div class="card-body"><div class="form-grid"><input class="field" id="profileFullName" placeholder="Họ và tên" /><input class="field" id="profileEmail" placeholder="Email" /><input class="field" id="profileUsername" placeholder="Tên đăng nhập" disabled /><input class="field" id="profileEmployeeCode" placeholder="Mã nhân viên" disabled /><input class="field" id="profileDepartment" placeholder="Phòng ban" disabled /><input class="field" id="profileJobTitle" placeholder="Chức danh" disabled /></div><div class="card-actions"><button class="btn btn-primary" type="button" onclick="saveProfile()">Lưu hồ sơ</button></div></div></div><div class="card"><div class="card-header"><div><div class="card-title">Đổi mật khẩu</div><div class="card-subtitle">Mật khẩu mới tối thiểu 6 ký tự.</div></div></div><div class="card-body"><div class="form-grid"><input class="field wide" id="oldPassword" type="password" placeholder="Mật khẩu hiện tại" /><input class="field wide" id="newPassword" type="password" placeholder="Mật khẩu mới" /><input class="field wide" id="confirmPassword" type="password" placeholder="Nhập lại mật khẩu mới" /></div><div class="card-actions"><button class="btn btn-primary" type="button" onclick="changePassword()">Đổi mật khẩu</button></div></div></div></div></section>
             </main>
@@ -175,25 +183,53 @@
             </div>
         </div>
     </div>
-    <div class="modal-backdrop" id="surveyModal">
-        <div class="modal-card card">
-            <div class="card-header">
-                <div>
-                    <div class="card-title" id="surveyModalTitle">Khảo sát</div>
-                    <div class="card-subtitle">Đánh giá nhanh trải nghiệm học tập của bạn.</div>
-                </div>
-                <button class="btn btn-secondary btn-icon" type="button" onclick="closeModal('surveyModal')">×</button>
-            </div>
-            <div class="card-body">
-                <div class="stars" id="surveyStars"></div>
-                <textarea class="textarea" id="surveyAnswer" placeholder="Nhập phản hồi của bạn..."></textarea>
-                <div class="card-actions">
-                    <button class="btn btn-primary" type="button" onclick="submitSurvey()">Gửi khảo sát</button>
-                </div>
-            </div>
-        </div>
-    </div>
     <script>
+        @if (TempData["ErrorMessage"] != null)
+        {
+            <text>
+            window.addEventListener('DOMContentLoaded', () => {
+                showToast('@Html.Raw(TempData["ErrorMessage"])', 'danger');
+            });
+            </text>
+        }
+
+        function renderDueDateInfo(dueDateStr, progress) {
+            if (!dueDateStr) return { html: '', isLocked: false };
+            
+            const dueDate = new Date(dueDateStr);
+            const now = new Date();
+            
+            const formattedDate = dueDate.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Ho_Chi_Minh' });
+            let badgeHtml = '';
+            let isLocked = false;
+            
+            if (now > dueDate) {
+                if (progress < 100) {
+                    badgeHtml = `<span style="color: #ef4444; font-weight: 700;">⚠️ Đã quá hạn (Đã khóa) - Hạn: ${formattedDate}</span>`;
+                    isLocked = true;
+                } else {
+                    badgeHtml = `<span style="color: #10b981;">Hạn: ${formattedDate} (Hoàn thành)</span>`;
+                }
+            } else {
+                const diffMs = dueDate - now;
+                const diffMins = Math.ceil(diffMs / (1000 * 60));
+                const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
+                const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                
+                if (progress >= 100) {
+                    badgeHtml = `<span style="color: #10b981;">Hạn: ${formattedDate} (Hoàn thành)</span>`;
+                } else if (diffMins <= 60) {
+                    badgeHtml = `<span style="color: #f59e0b; font-weight: 700;">⚠️ Hết hạn sau ${diffMins} phút!</span>`;
+                } else if (diffHours <= 24) {
+                    badgeHtml = `<span style="color: #f59e0b; font-weight: 700;">⚠️ Hết hạn sau ${diffHours} giờ!</span>`;
+                } else {
+                    badgeHtml = `<span style="color: var(--text-secondary);">Hạn: ${formattedDate} (Còn ${diffDays} ngày)</span>`;
+                }
+            }
+            
+            return { html: `<div class="meta-line">${badgeHtml}</div>`, isLocked: isLocked };
+        }
+
         const pageConfig = {
             dashboard: { title: 'Dashboard', subtitle: 'Tổng quan tiến độ học tập, lịch học và thông báo cá nhân.' },
             courses: { title: 'Chương trình đào tạo', subtitle: 'Danh sách khóa học bạn có thể tham gia.' },
@@ -203,13 +239,11 @@
             'study-schedule': { title: 'Lịch học tập', subtitle: 'Lịch offline, lịch thi và hoạt động gần nhất.' },
             'exam-history': { title: 'Lịch sử thi', subtitle: 'Toàn bộ kết quả kiểm tra đã thực hiện.' },
             certificates: { title: 'Chứng chỉ', subtitle: 'Các chứng chỉ đã được cấp cho bạn.' },
-            achievements: { title: 'Thành tích', subtitle: 'Điểm thưởng, huy hiệu và bảng xếp hạng.' },
-            surveys: { title: 'Khảo sát', subtitle: 'Các khảo sát đang mở để bạn phản hồi.' },
             notifications: { title: 'Thông báo', subtitle: 'Theo dõi cập nhật mới nhất từ hệ thống.' },
             profile: { title: 'Hồ sơ cá nhân', subtitle: 'Quản lý thông tin cá nhân và mật khẩu.' }
         };
 
-        const state = { notifications: [], offlineEvents: [], examHistory: [], selectedSurveyId: null, selectedSurveyRating: 5, scheduleItems: [], scheduleMonth: new Date() };
+        const state = { notifications: [], offlineEvents: [], examHistory: [], scheduleItems: [], scheduleMonth: new Date() };
 
         function renderEmpty(message) {
             return `<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">Chưa có dữ liệu</div><div class="empty-desc">${escapeHtml(message)}</div></div>`;
@@ -257,8 +291,6 @@
             if (pageId === 'study-schedule') return loadStudySchedule();
             if (pageId === 'exam-history') return loadExamHistory();
             if (pageId === 'certificates') return loadCertificates();
-            if (pageId === 'achievements') return loadAchievements();
-            if (pageId === 'surveys') return loadSurveys();
             if (pageId === 'notifications') return loadNotifications();
             if (pageId === 'profile') return loadProfile();
             return loadDashboard();
@@ -286,20 +318,26 @@
                 statCard('📘', 'blue', dashboard.totalEnrolled, 'Khóa đã ghi danh'),
                 statCard('⏳', 'cyan', dashboard.inProgress, 'Đang học'),
                 statCard('✅', 'green', dashboard.completed, 'Hoàn thành'),
-                statCard('🏅', 'orange', dashboard.certificates, 'Chứng chỉ'),
-                statCard('⭐', 'purple', dashboard.totalPoints, 'Điểm thưởng'),
-                statCard('🎖️', 'red', dashboard.badges, 'Huy hiệu')
+                statCard('🏅', 'orange', dashboard.certificates, 'Chứng chỉ')
             ].join('');
 
             document.getElementById('recentCoursesWrap').innerHTML = (dashboard.recentCourses?.length ?? 0)
-                ? dashboard.recentCourses.map(c => `
+                ? dashboard.recentCourses.map(c => {
+                    const dueInfo = renderDueDateInfo(c.dueDate, c.progress);
+                    const btnHtml = dueInfo.isLocked
+                        ? `<button class="btn btn-danger btn-sm" type="button" onclick="requestExtension(${c.courseId}, '${escapeHtml(c.title)}')">Xin gia hạn</button>`
+                        : `<a class="btn btn-primary btn-sm" href="/Student/Learn/${c.courseId}">Tiếp tục học</a>`;
+                    
+                    return `
                     <div class="course-card">
                         <h3>${escapeHtml(c.title || 'Khóa học')}</h3>
                         <div class="meta-line">${statusBadge(c.status || 'NotStarted')}</div>
                         <div class="meta-line">Ngày ghi danh: ${fmtDate(c.enrollDate)}</div>
+                        ${dueInfo.html}
                         <div style="margin-top:12px">${progressBar(c.progress || 0)}</div>
-                        <div class="card-actions"><a class="btn btn-primary btn-sm" href="/Student/Learn/${c.courseId}">Tiếp tục học</a></div>
-                    </div>`).join('')
+                        <div class="card-actions">${btnHtml}</div>
+                    </div>`;
+                }).join('')
                 : renderEmpty('Bạn chưa có khóa học nào được ghi danh.');
 
             document.getElementById('dashboardNotifications').innerHTML = (notifications.notifications?.length ?? 0)
@@ -323,32 +361,66 @@
         }
 
         function renderCourseCard(course) {
+            const dueInfo = renderDueDateInfo(course.dueDate, course.progress);
+            let btnHtml = '';
+            if (dueInfo.isLocked) {
+                btnHtml = `<button class="btn btn-danger btn-sm" type="button" onclick="requestExtension(${course.courseId}, '${escapeHtml(course.title)}')">Xin gia hạn</button>`;
+            } else {
+                btnHtml = course.enrolled 
+                    ? `<a class="btn btn-primary btn-sm" href="/Student/Learn/${course.courseId}">Vào học</a>` 
+                    : `<button class="btn btn-primary btn-sm" type="button" onclick="confirmEnroll(${course.courseId})">Ghi danh</button>`;
+            }
             return `
                 <div class="course-card">
                     <h3>${escapeHtml(course.title || 'Khóa học')}</h3>
                     <div class="meta-line">Danh mục: ${escapeHtml(course.category || 'Chưa phân loại')}</div>
                     <div class="meta-line">Quiz: ${fmtNumber(course.quizCount || 0)} | ${course.isMandatory ? 'Bắt buộc' : 'Tự chọn'}</div>
+                    ${dueInfo.html}
                     <div style="margin-top:12px">${progressBar(course.progress || 0)}</div>
                     <div class="card-actions">
                         <button class="btn btn-secondary btn-sm" type="button" onclick="openCourseDetail(${course.courseId})">Xem chi tiết</button>
-                        ${course.enrolled ? `<a class="btn btn-primary btn-sm" href="/Student/Learn/${course.courseId}">Vào học</a>` : `<button class="btn btn-primary btn-sm" type="button" onclick="confirmEnroll(${course.courseId})">Ghi danh</button>`}
+                        ${btnHtml}
                     </div>
                 </div>`;
         }
 
         async function openCourseDetail(courseId) {
             const data = await apiFetch(`/api/student/courses/${courseId}`);
+            const dueInfo = renderDueDateInfo(data.dueDate, data.progress);
+            
             document.getElementById('courseModalTitle').textContent = data.title || 'Chi tiết khóa học';
             document.getElementById('courseModalSub').textContent = `Danh mục: ${data.category || 'Chung'}`;
+            
+            let dueDetailHtml = dueInfo.html ? `<div class="info-item"><div class="meta-line">Hạn hoàn thành</div><div><strong>${dueInfo.html}</strong></div></div>` : '';
+            
             document.getElementById('courseDetailWrap').innerHTML = `
                 <div class="info-item"><div class="meta-line">Mô tả</div><div><strong>${escapeHtml(data.description || 'Chưa có mô tả')}</strong></div></div>
+                ${dueDetailHtml}
                 <div class="info-item"><div class="meta-line">Số chương</div><div><strong>${fmtNumber(data.totalModules || 0)}</strong></div></div>
                 <div class="info-item"><div class="meta-line">Số bài học</div><div><strong>${fmtNumber(data.totalLessons || 0)}</strong></div></div>
                 <div class="info-item"><div class="meta-line">Số bài kiểm tra</div><div><strong>${fmtNumber(data.totalQuizzes || 0)}</strong></div></div>`;
+            
             const action = document.getElementById('courseModalAction');
             action.style.display = '';
-            action.textContent = data.enrolled ? 'Vào học ngay' : 'Ghi danh khóa học';
-            action.onclick = () => data.enrolled ? window.location.href = `/Student/Learn/${data.courseId}` : confirmEnroll(data.courseId, true);
+            
+            if (dueInfo.isLocked) {
+                action.className = 'btn btn-danger';
+                action.disabled = false;
+                action.style.opacity = '';
+                action.style.cursor = '';
+                action.textContent = 'Xin gia hạn';
+                action.onclick = () => {
+                    closeModal('courseDetailModal');
+                    requestExtension(data.courseId, data.title);
+                };
+            } else {
+                action.className = 'btn btn-primary';
+                action.disabled = false;
+                action.style.opacity = '';
+                action.style.cursor = '';
+                action.textContent = data.enrolled ? 'Vào học ngay' : 'Ghi danh khóa học';
+                action.onclick = () => data.enrolled ? window.location.href = `/Student/Learn/${data.courseId}` : confirmEnroll(data.courseId, true);
+            }
             openModal('courseDetailModal');
         }
 
@@ -407,12 +479,19 @@
                 ]);
 
                 // Render Offline Events
-                const offlineHtml = offlineEvents.length ? offlineEvents.map(ev => `
+                const offlineHtml = offlineEvents.length ? offlineEvents.map(ev => {
+                    const cleanDateStr = ev.startTime ? ((ev.startTime.includes('Z') || ev.startTime.match(/[+-]\d{2}:\d{2}$/)) ? ev.startTime : ev.startTime + '+07:00') : '';
+                    const d = new Date(cleanDateStr);
+                    const weekday = new Intl.DateTimeFormat('vi-VN', { weekday: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(d);
+                    const day = new Intl.DateTimeFormat('vi-VN', { day: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' }).format(d);
+                    const month = new Intl.DateTimeFormat('vi-VN', { month: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' }).format(d);
+
+                    return `
                     <div class="schedule-item">
                         <div style="text-align:center; padding:10px; background:#f1f5f9; border-radius:12px;">
-                            <div class="schedule-day">${new Date(ev.startTime).toLocaleDateString('vi-VN', { weekday: 'short' })}</div>
-                            <div style="font-size:20px; font-weight:800; color:#1e293b;">${new Date(ev.startTime).getDate()}</div>
-                            <div class="meta-line">Tháng ${new Date(ev.startTime).getMonth() + 1}</div>
+                            <div class="schedule-day">${weekday}</div>
+                            <div style="font-size:20px; font-weight:800; color:#1e293b;">${day}</div>
+                            <div class="meta-line">${month}</div>
                         </div>
                         <div style="flex:1">
                             <div style="display:flex; justify-content:space-between; align-items:start">
@@ -436,15 +515,23 @@
                                     : `<button class="btn btn-soft btn-sm" onclick="registerEvent(${ev.eventId})">📝 Đăng ký tham gia</button>`}
                             </div>
                         </div>
-                    </div>`).join('') : renderEmpty('Chưa có lịch học offline nào.');
+                    </div>`;
+                }).join('') : renderEmpty('Chưa có lịch học offline nào.');
                 document.getElementById('offlineScheduleList').innerHTML = offlineHtml;
 
                 // Render Quiz Schedule
-                const quizHtml = upcomingQuizzes.length ? upcomingQuizzes.map(q => `
+                const quizHtml = upcomingQuizzes.length ? upcomingQuizzes.map(q => {
+                    const cleanDateStr = q.startTime ? ((q.startTime.includes('Z') || q.startTime.match(/[+-]\d{2}:\d{2}$/)) ? q.startTime : q.startTime + '+07:00') : '';
+                    const isStarted = !q.startTime || new Date(cleanDateStr) <= new Date();
+                    const d = new Date(cleanDateStr);
+                    const weekday = new Intl.DateTimeFormat('vi-VN', { weekday: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(d);
+                    const day = new Intl.DateTimeFormat('vi-VN', { day: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' }).format(d);
+
+                    return `
                     <div class="schedule-item" style="border-left: 4px solid #f59e0b;">
                         <div style="text-align:center; padding:10px; background:#fff7ed; border-radius:12px;">
-                            <div class="schedule-day" style="color:#f59e0b">${new Date(q.startTime).toLocaleDateString('vi-VN', { weekday: 'short' })}</div>
-                            <div style="font-size:20px; font-weight:800; color:#7c2d12;">${new Date(q.startTime).getDate()}</div>
+                            <div class="schedule-day" style="color:#f59e0b">${weekday}</div>
+                            <div style="font-size:20px; font-weight:800; color:#7c2d12;">${day}</div>
                         </div>
                         <div style="flex:1">
                             <div style="font-size:16px; font-weight:800; color:#0f172a">${escapeHtml(q.title)}</div>
@@ -452,20 +539,38 @@
                             <div class="meta-line">⏰ Thời gian làm bài: ${q.durationMinutes} phút</div>
                             <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center">
                                 <div style="font-size:12px; font-weight:700; color:#d97706;">Sẽ mở lúc: ${fmtDateTime(q.startTime)}</div>
-                                <a class="btn btn-primary btn-sm" href="/Student/Learn/${q.courseId}">Vào chuẩn bị</a>
+                                ${!isStarted ? 
+                                    `<button class="btn btn-secondary btn-sm" disabled style="opacity:0.6; cursor:not-allowed">Chưa đến giờ thi</button>` :
+                                    (q.courseId > 0 ? 
+                                        `<a class="btn btn-primary btn-sm" href="/Student/Learn/${q.courseId}">Vào chuẩn bị</a>` :
+                                        `<a class="btn btn-warning btn-sm" href="/Student/Quiz/0/${q.examId}">Làm bài ngay</a>`)}
                             </div>
                         </div>
-                    </div>`).join('') : renderEmpty('Chưa có lịch thi nào sắp tới.');
+                    </div>`;
+                }).join('') : renderEmpty('Chưa có lịch thi nào sắp tới.');
                 document.getElementById('quizScheduleList').innerHTML = quizHtml;
 
                 // Dashboard summary (combine first few items)
                 const dashHtml = [...offlineEvents.slice(0, 2), ...upcomingQuizzes.slice(0, 2)]
-                    .sort((a,b) => new Date(a.startTime) - new Date(b.startTime))
+                    .sort((a,b) => new Date(a.startTime ? ((a.startTime.includes('Z') || a.startTime.match(/[+-]\d{2}:\d{2}$/)) ? a.startTime : a.startTime + '+07:00') : 0) - new Date(b.startTime ? ((b.startTime.includes('Z') || b.startTime.match(/[+-]\d{2}:\d{2}$/)) ? b.startTime : b.startTime + '+07:00') : 0))
                     .map(item => `<div style="margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid #f1f5f9;">
                         <div style="font-weight:700; font-size:14px;">${escapeHtml(item.title || item.courseTitle)}</div>
                         <div style="font-size:12px; color:var(--text-secondary)">${fmtDateTime(item.startTime)}</div>
                     </div>`).join('') || renderEmpty('Chưa có lịch học.');
                 document.getElementById('dashboardSchedule').innerHTML = dashHtml;
+                
+                // Populate scheduleItems for calendar
+                state.scheduleItems = [
+                    ...offlineEvents.map(ev => ({
+                        date: ev.startTime,
+                        title: `Lịch học: ${ev.courseTitle}`
+                    })),
+                    ...upcomingQuizzes.map(q => ({
+                        date: q.startTime,
+                        title: `Bài kiểm tra: ${q.title}`
+                    }))
+                ];
+                renderStudyScheduleCalendar();
 
             } catch (e) { console.error(e); }
         }
@@ -473,7 +578,9 @@
         function isAttendanceTime(ev) {
             if (!ev.attendanceStartTime || !ev.attendanceEndTime) return false;
             const now = new Date();
-            return now >= new Date(ev.attendanceStartTime) && now <= new Date(ev.attendanceEndTime);
+            const startClean = ev.attendanceStartTime.includes('Z') || ev.attendanceStartTime.match(/[+-]\d{2}:\d{2}$/) ? ev.attendanceStartTime : ev.attendanceStartTime + '+07:00';
+            const endClean = ev.attendanceEndTime.includes('Z') || ev.attendanceEndTime.match(/[+-]\d{2}:\d{2}$/) ? ev.attendanceEndTime : ev.attendanceEndTime + '+07:00';
+            return now >= new Date(startClean) && now <= new Date(endClean);
         }
 
         async function studentCheckIn(eventId) {
@@ -488,9 +595,17 @@
 
         function fmtTime(dateStr) {
             if (!dateStr) return '--:--';
-            const d = new Date(dateStr);
+            let d;
+            if (dateStr instanceof Date) {
+                d = dateStr;
+            } else {
+                let clean = String(dateStr);
+                const cleanDateStr = (clean.includes('Z') || clean.match(/[+-]\d{2}:\d{2}$/)) ? clean : clean + '+07:00';
+                d = new Date(cleanDateStr);
+            }
             if (isNaN(d.getTime())) return '--:--';
-            return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+            const parts = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Ho_Chi_Minh' }).split(':');
+            return parts[0] + ':' + parts[1];
         }
 
         function renderStudyScheduleCalendar() {
@@ -582,18 +697,41 @@
 
                 const html = data.questions.map((q, idx) => {
                     const isCorrect = q.isCorrect;
-                    return `
-                        <div class="glass-card" style="padding: 28px; border-left: 6px solid ${isCorrect ? '#22c55e' : '#ef4444'}; background: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
-                                <div style="flex: 1;">
-                                    <div style="font-size: 13px; font-weight: 800; color: var(--brand); text-transform: uppercase; margin-bottom: 8px;">CÂU HỎI ${idx + 1}</div>
-                                    <h3 style="font-size: 18px; font-weight: 700; color: var(--ink); line-height: 1.5; margin: 0;">${escapeHtml(q.questionText)}</h3>
+                    let optionsHtml = '';
+
+                    if (q.questionType === 'Essay') {
+                        const studentText = q.selectedTextResponse || '(Không trả lời)';
+                        optionsHtml = `
+                            <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
+                                <div style="padding: 16px 20px; border-radius: 14px; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155;">
+                                    <div style="font-size: 11px; font-weight: 800; color: #64748b; margin-bottom: 4px; text-transform: uppercase;">Bài làm tự luận:</div>
+                                    <div style="font-size: 15px; line-height: 1.6; white-space: pre-wrap; font-weight: 600;">${escapeHtml(studentText)}</div>
                                 </div>
-                                <div style="padding: 8px 16px; border-radius: 12px; font-weight: 800; font-size: 12px; border: 1px solid ${isCorrect ? '#22c55e' : '#ef4444'}; color: ${isCorrect ? '#16a34a' : '#dc2626'}; background: ${isCorrect ? '#f0fdf4' : '#fef2f2'};">
-                                    ${isCorrect ? 'CHÍNH XÁC ✓' : 'CHƯA ĐÚNG ✗'}
+                                <div style="font-size: 12px; color: #64748b; font-style: italic;">
+                                    ℹ️ Câu trả lời tự luận được ghi nhận và đánh giá hoàn thành.
                                 </div>
-                            </div>
-                            <div style="display: grid; gap: 12px;">
+                            </div>`;
+                    } else if (q.questionType === 'FillInTheBlank') {
+                        const correctText = q.correctOptionText || '';
+                        const studentText = q.selectedTextResponse || '(Không trả lời)';
+                        const labelBorder = isCorrect ? '2px solid #22c55e' : '2px solid #ef4444';
+                        const labelBg = isCorrect ? '#f0fdf4' : '#fef2f2';
+                        const labelColor = isCorrect ? '#16a34a' : '#b91c1c';
+                        
+                        optionsHtml = `
+                            <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
+                                <div style="padding: 16px 20px; border-radius: 14px; border: ${labelBorder}; background: ${labelBg}; color: ${labelColor};">
+                                    <div style="font-size: 11px; font-weight: 800; opacity: 0.8; margin-bottom: 4px; text-transform: uppercase;">Câu trả lời của bạn:</div>
+                                    <div style="font-size: 15px; font-weight: 700;">${escapeHtml(studentText)}</div>
+                                </div>
+                                <div style="padding: 16px 20px; border-radius: 14px; border: 1px dashed #22c55e; background: #fff; color: #16a34a;">
+                                    <div style="font-size: 11px; font-weight: 800; opacity: 0.8; margin-bottom: 4px; text-transform: uppercase;">Đáp án chấp nhận:</div>
+                                    <div style="font-size: 15px; font-weight: 700;">${escapeHtml(correctText)}</div>
+                                </div>
+                            </div>`;
+                    } else {
+                        optionsHtml = `
+                            <div style="display: grid; gap: 12px; margin-top: 16px;">
                                 ${q.options.map(o => {
                                     let border = "1px solid var(--border)";
                                     let bg = "#fff";
@@ -616,7 +754,27 @@
                                             ${tag}
                                         </div>`;
                                 }).join('')}
+                            </div>`;
+                    }
+
+                    const typeLabel = q.questionType === 'MultipleChoice' ? 'Trắc nghiệm' : q.questionType === 'Essay' ? 'Tự luận' : 'Điền từ';
+                    const typeBadge = q.questionType === 'MultipleChoice' ? 'badge-blue' : q.questionType === 'Essay' ? 'badge-purple' : 'badge-orange';
+
+                    return `
+                        <div class="glass-card" style="padding: 28px; border-left: 6px solid ${isCorrect ? '#22c55e' : '#ef4444'}; background: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px; border-radius: 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+                                <div style="flex: 1;">
+                                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                        <div style="font-size: 13px; font-weight: 800; color: var(--brand); text-transform: uppercase;">CÂU HỎI ${idx + 1}</div>
+                                        <span class="badge ${typeBadge}" style="font-size: 10px; padding: 2px 6px;">${typeLabel}</span>
+                                    </div>
+                                    <h3 style="font-size: 18px; font-weight: 700; color: var(--ink); line-height: 1.5; margin: 0;">${escapeHtml(q.questionText)}</h3>
+                                </div>
+                                <div style="padding: 8px 16px; border-radius: 12px; font-weight: 800; font-size: 12px; border: 1px solid ${isCorrect ? '#22c55e' : '#ef4444'}; color: ${isCorrect ? '#16a34a' : '#dc2626'}; background: ${isCorrect ? '#f0fdf4' : '#fef2f2'}; flex-shrink: 0; margin-left: 16px;">
+                                    ${isCorrect ? 'CHÍNH XÁC ✓' : 'CHƯA ĐÚNG ✗'}
+                                </div>
                             </div>
+                            ${optionsHtml}
                         </div>`;
                 }).join('');
                 
@@ -635,57 +793,6 @@
                     <div class="meta-line">Mã chứng chỉ: ${escapeHtml(c.certCode || '--')}</div>
                     <div class="meta-line">Ngày cấp: ${fmtDate(c.issueDate)}</div>
                 </div>`).join('') : renderEmpty('Bạn chưa có chứng chỉ nào.');
-        }
-
-        async function loadAchievements() {
-            const data = await apiFetch('/api/student/achievements');
-            document.getElementById('achievementStats').innerHTML = [
-                statCard('⭐', 'purple', data.totalPoints || 0, 'Tổng điểm'),
-                statCard('🎖️', 'orange', data.badges?.length || 0, 'Huy hiệu'),
-                statCard('🏆', 'blue', data.leaderboard?.length || 0, 'Top xếp hạng')
-            ].join('');
-            document.getElementById('badgesList').innerHTML = (data.badges?.length ?? 0) ? data.badges.map(b => `
-                <div class="badge-card">
-                    <h3>${escapeHtml(b.badgeName || 'Huy hiệu')}</h3>
-                    <div class="meta-line">${escapeHtml(b.description || '--')}</div>
-                    <div class="meta-line">Nhận ngày ${fmtDate(b.earnedDate)}</div>
-                </div>`).join('') : renderEmpty('Bạn chưa có huy hiệu nào.');
-            document.getElementById('leaderboardList').innerHTML = (data.leaderboard?.length ?? 0) ? data.leaderboard.map((u, idx) => `
-                <div class="rank-item"><div><strong>#${idx + 1}</strong> ${escapeHtml(u.fullName || 'N/A')}</div><div class="badge badge-blue">${fmtNumber(u.totalPoints || 0)} điểm</div></div>`).join('') : renderEmpty('Chưa có dữ liệu xếp hạng.');
-        }
-
-        async function loadSurveys() {
-            const data = await apiFetch('/api/student/surveys');
-            document.getElementById('surveysList').innerHTML = data.length ? data.map(s => `
-                <div class="survey-card">
-                    <h3>${escapeHtml(s.title || 'Khảo sát')}</h3>
-                    <div class="meta-line">${escapeHtml(s.description || '--')}</div>
-                    <div class="meta-line">Hạn: ${fmtDate(s.expiredDate)}</div>
-                    <div class="card-actions">${s.isCompleted ? '<span class="badge badge-success">Đã hoàn thành</span>' : s.isExpired ? '<span class="badge badge-danger">Đã hết hạn</span>' : `<button class="btn btn-primary btn-sm" type="button" onclick="openSurveyModal(${s.surveyId}, ${JSON.stringify(s.title || '')})">Trả lời khảo sát</button>`}</div>
-                </div>`).join('') : renderEmpty('Hiện chưa có khảo sát nào.');
-        }
-
-        function openSurveyModal(surveyId, title) {
-            state.selectedSurveyId = surveyId;
-            state.selectedSurveyRating = 5;
-            document.getElementById('surveyModalTitle').textContent = title || 'Khảo sát';
-            document.getElementById('surveyAnswer').value = '';
-            document.getElementById('surveyStars').innerHTML = Array.from({ length: 5 }, (_, i) => `<span class="star ${i < 5 ? 'active' : ''}" onclick="setSurveyRating(${i + 1})">★</span>`).join('');
-            openModal('surveyModal');
-        }
-
-        function setSurveyRating(value) {
-            state.selectedSurveyRating = value;
-            document.querySelectorAll('#surveyStars .star').forEach((star, idx) => star.classList.toggle('active', idx < value));
-        }
-
-        async function submitSurvey() {
-            if (!state.selectedSurveyId) return;
-            const answerData = JSON.stringify({ rating: state.selectedSurveyRating, comment: document.getElementById('surveyAnswer').value.trim() });
-            await apiFetch(`/api/student/surveys/${state.selectedSurveyId}/submit`, { method: 'POST', body: JSON.stringify({ answerData }) });
-            closeModal('surveyModal');
-            showToast('Gửi khảo sát thành công.');
-            await loadSurveys();
         }
 
         async function loadNotifications(silent) {
@@ -745,16 +852,43 @@
             showToast('Đổi mật khẩu thành công.');
         }
 
-        function startStudentApp() {
+        async function requestExtension(courseId, title) {
+            const { value: reason } = await Swal.fire({
+                title: 'Xin gia hạn khóa học',
+                html: `Nhập lý do hợp lý xin gia hạn khóa học:<br/><strong>${title}</strong>`,
+                input: 'textarea',
+                inputPlaceholder: 'Lý do xin gia hạn...',
+                showCancelButton: true,
+                confirmButtonText: 'Gửi yêu cầu',
+                cancelButtonText: 'Hủy',
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'Bạn phải nhập lý do!';
+                    }
+                }
+            });
+            
+            if (reason) {
+                try {
+                    await apiFetch(`/api/student/courses/${courseId}/request-extension`, {
+                        method: 'POST',
+                        body: JSON.stringify({ reason: reason.trim() })
+                    });
+                    showToast('Đã gửi yêu cầu gia hạn đến Trưởng phòng thành công!', 'success');
+                    await loadCourses();
+                    await loadMyCourses();
+                    await loadDashboard();
+                } catch (e) {
+                    showToast('Lỗi khi gửi yêu cầu: ' + e.message, 'danger');
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
             initializeTheme();
             initializeShell();
             initStudentDashboard();
-        }
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', startStudentApp);
-        } else {
-            startStudentApp();
-        }
+        });
     </script>
 </body>
 </html>

@@ -1,19 +1,26 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using KhoaHoc.Models;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using KhoaHoc.Infrastructure;
 
 namespace KhoaHoc.Controllers;
 
 public class HRController : Controller
 {
     private readonly CorporateLmsProContext _db;
-
+    private readonly IWebHostEnvironment _env;
     private readonly KhoaHoc.Services.IEmailService _emailService;
     private readonly KhoaHoc.Services.IAIService _aiService;
 
-    public HRController(CorporateLmsProContext db, KhoaHoc.Services.IEmailService emailService, KhoaHoc.Services.IAIService aiService)
+    public HRController(CorporateLmsProContext db, IWebHostEnvironment env, KhoaHoc.Services.IEmailService emailService, KhoaHoc.Services.IAIService aiService)
     {
         _db = db;
+        _env = env;
         _emailService = emailService;
         _aiService = aiService;
     }
@@ -36,6 +43,19 @@ public class HRController : Controller
 
     private bool IsTrainingCenter() =>
         HttpContext.Session.GetString("DepartmentName") == "Trung tâm Đào tạo Nội bộ";
+
+    private IActionResult? RequireTrainingCenterManagerApi()
+    {
+        var auth = RequireManager();
+        if (auth != null)
+            return Json(new { error = "Unauthorized" });
+
+        var role = HttpContext.Session.GetString("Role");
+        if (role != "Manager" || !IsTrainingCenter())
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Chỉ Trưởng phòng Đào tạo mới có quyền thực hiện thao tác này." });
+
+        return null;
+    }
 
     private IActionResult? RequireDepartmentManagerApi()
     {
@@ -200,13 +220,38 @@ public class HRController : Controller
             return BadRequest(new { error = "Trưởng phòng không được phép tự phân công khóa học cho chính mình." });
         }
 
+        var course = await _db.Courses.FindAsync(dto.CourseId);
+        if (course == null) return NotFound(new { error = "Khóa học không tồn tại." });
+
+        if (course.EndDate.HasValue && course.EndDate.Value.Date < DateTime.Today)
+        {
+            return BadRequest(new { error = "Khóa học này đã kết thúc, không thể phân công." });
+        }
+
+        DateTime? finalDueDate = dto.DueDate;
+        if (!finalDueDate.HasValue)
+        {
+            finalDueDate = course.EndDate;
+        }
+        else
+        {
+            if (course.EndDate.HasValue && finalDueDate.Value.Date > course.EndDate.Value.Date)
+            {
+                return BadRequest(new { error = $"Hạn hoàn thành không được muộn hơn ngày kết thúc của khóa học ({course.EndDate.Value:dd/MM/yyyy})." });
+            }
+            if (finalDueDate.Value.Date < DateTime.Today)
+            {
+                return BadRequest(new { error = "Hạn hoàn thành không được sớm hơn ngày hiện tại." });
+            }
+        }
+
         var assignment = new TrainingAssignment
         {
             UserId = dto.UserId,
             CourseId = dto.CourseId,
             AssignedBy = GetCurrentUserId(),
             AssignedDate = DateTime.Now,
-            DueDate = dto.DueDate,
+            DueDate = finalDueDate,
             Priority = dto.Priority ?? "Normal"
         };
 
@@ -340,10 +385,11 @@ public class HRController : Controller
             .Where(u => u.UserId != currentUserId)
             .AsQueryable();
 
-        if (currentDeptId > 0)
+        var isTrainingCenter = IsTrainingCenter();
+        if (currentDeptId > 0 && !isTrainingCenter)
             query = query.Where(u => u.DepartmentId == currentDeptId);
-        else if (departmentId.HasValue)
-            query = query.Where(u => u.DepartmentId == departmentId);
+        else if (departmentId.HasValue && departmentId.Value > 0)
+            query = query.Where(u => u.DepartmentId == departmentId.Value);
 
         var employees = await query
             .Select(u => new
@@ -381,16 +427,53 @@ public class HRController : Controller
         if (myDeptId > 0 && user.DepartmentId != myDeptId)
             return Forbid();
 
-        var courses = await _db.Enrollments
+        var assignmentsList = await _db.TrainingAssignments
+            .Include(ta => ta.Course)
+            .Where(ta => ta.UserId == id)
+            .ToListAsync();
+
+        var enrollmentsList = await _db.Enrollments
             .Include(e => e.Course)
             .Where(e => e.UserId == id)
-            .Select(e => new {
-                title = e.Course!.Title,
-                progress = e.ProgressPercent,
-                status = e.Status,
-                enrollDate = e.EnrollDate
-            })
             .ToListAsync();
+
+        var allCourses = new List<object>();
+        var seenCourseIds = new HashSet<int>();
+
+        var groupedAssignments = assignmentsList
+            .Where(ta => ta.CourseId.HasValue)
+            .GroupBy(ta => ta.CourseId.Value)
+            .Select(g => g.OrderByDescending(ta => ta.DueDate ?? DateTime.MaxValue).First())
+            .ToList();
+
+        foreach (var ta in groupedAssignments)
+        {
+            var enroll = enrollmentsList.FirstOrDefault(e => e.CourseId == ta.CourseId.Value);
+            allCourses.Add(new {
+                courseId = ta.CourseId.Value,
+                title = ta.Course?.Title ?? "Khóa học",
+                progress = enroll?.ProgressPercent ?? 0,
+                status = enroll?.Status ?? "NotStarted",
+                assignmentId = (int?)ta.AssignmentId,
+                dueDate = ta.DueDate
+            });
+            seenCourseIds.Add(ta.CourseId.Value);
+        }
+
+        foreach (var e in enrollmentsList)
+        {
+            if (e.CourseId.HasValue && !seenCourseIds.Contains(e.CourseId.Value))
+            {
+                allCourses.Add(new {
+                    courseId = e.CourseId.Value,
+                    title = e.Course?.Title ?? "Khóa học",
+                    progress = e.ProgressPercent ?? 0,
+                    status = e.Status ?? "NotStarted",
+                    assignmentId = (int?)null,
+                    dueDate = (DateTime?)null
+                });
+            }
+        }
 
         var skills = await _db.UserSkills
             .Include(s => s.Skill)
@@ -409,9 +492,106 @@ public class HRController : Controller
             departmentName = user.Department?.DepartmentName ?? "N/A",
             jobTitle = user.JobTitle?.TitleName ?? "N/A",
             status = user.Status,
-            courses,
-            skills
+            courses = allCourses,
+            skills = skills
         });
+    }
+
+    // NEW: Hủy giao khóa học
+    [HttpDelete("/api/hr/assignments/{id}")]
+    public async Task<IActionResult> DeleteAssignment(int id)
+    {
+        var auth = RequireDepartmentManagerApi();
+        if (auth != null) return auth;
+
+        var assignment = await _db.TrainingAssignments.FindAsync(id);
+        if (assignment == null) return NotFound("Phân công không tồn tại.");
+
+        var user = await _db.Users.FindAsync(assignment.UserId);
+        int myDeptId = GetCurrentDeptId();
+        if (myDeptId > 0 && user != null && user.DepartmentId != myDeptId)
+        {
+            return Forbid();
+        }
+
+        var allRelated = await _db.TrainingAssignments
+            .Where(ta => ta.UserId == assignment.UserId && ta.CourseId == assignment.CourseId)
+            .ToListAsync();
+        _db.TrainingAssignments.RemoveRange(allRelated);
+        await _db.SaveChangesAsync();
+
+        return Ok(new { success = true });
+    }
+
+    // NEW: Gia hạn khóa học
+    [HttpPost("/api/hr/assignments/{id}/extend")]
+    public async Task<IActionResult> ExtendAssignment(int id, [FromBody] ExtendAssignmentDto dto)
+    {
+        var auth = RequireDepartmentManagerApi();
+        if (auth != null) return auth;
+
+        var assignment = await _db.TrainingAssignments.FindAsync(id);
+        if (assignment == null) return NotFound("Phân công không tồn tại.");
+
+        var user = await _db.Users.FindAsync(assignment.UserId);
+        int myDeptId = GetCurrentDeptId();
+        if (myDeptId > 0 && user != null && user.DepartmentId != myDeptId)
+        {
+            return Forbid();
+        }
+
+        if (!dto.NewDueDate.HasValue)
+        {
+            return BadRequest(new { error = "Vui lòng chọn thời gian gia hạn hợp lệ." });
+        }
+
+        var newDueDateLocal = dto.NewDueDate.Value.Kind == DateTimeKind.Utc
+            ? dto.NewDueDate.Value.ToLocalTime()
+            : dto.NewDueDate.Value;
+
+        var maxAllowedDate = DateTime.Now.AddHours(72).AddMinutes(5);
+        if (newDueDateLocal > maxAllowedDate)
+        {
+            return BadRequest(new { error = "Thời gian gia hạn không được vượt quá 3 ngày (72 giờ) kể từ hiện tại." });
+        }
+        if (newDueDateLocal < DateTime.Now.AddMinutes(-5))
+        {
+            return BadRequest(new { error = "Thời gian gia hạn phải lớn hơn thời gian hiện tại." });
+        }
+
+        var allRelated = await _db.TrainingAssignments
+            .Where(ta => ta.UserId == assignment.UserId && ta.CourseId == assignment.CourseId)
+            .ToListAsync();
+        foreach (var ta in allRelated)
+        {
+            ta.DueDate = newDueDateLocal;
+        }
+        await _db.SaveChangesAsync();
+
+        // Gửi thông báo cho học viên biết họ đã được gia hạn
+        var course = await _db.Courses.FindAsync(assignment.CourseId);
+        var notifTitle = $"Bạn đã được gia hạn khóa học '{course?.Title}' đến ngày {newDueDateLocal.ToString("dd/MM/yyyy HH:mm")}.";
+        if (notifTitle.Length > 255)
+        {
+            notifTitle = notifTitle.Substring(0, 252) + "...";
+        }
+        int nextNotifId = 1;
+        if (await _db.Notifications.AnyAsync())
+        {
+            nextNotifId = await _db.Notifications.MaxAsync(n => n.Id) + 1;
+        }
+
+        var notification = new Notification
+        {
+            Id = nextNotifId,
+            UserId = assignment.UserId,
+            Title = notifTitle,
+            IsRead = false
+        };
+        _db.Notifications.Add(notification);
+        await _db.SaveChangesAsync();
+
+        return Ok(new { success = true });
     }
 
     // NEW: Manager vô hiệu hóa nhân viên trong phòng
@@ -448,7 +628,7 @@ public class HRController : Controller
     }
 
     [HttpGet("/api/hr/courses")]
-    public async Task<IActionResult> GetCourses()
+    public async Task<IActionResult> GetCourses(string? search)
     {
         var auth = RequireManager();
         if (auth != null) return Json(new { error = "Unauthorized" });
@@ -466,12 +646,33 @@ public class HRController : Controller
                                   || c.OwnerDepartmentId == deptId);
         }
 
+        var pendingQuery = _db.DocumentLibraries.AsQueryable();
+        if (!isTrainingCenter)
+        {
+            pendingQuery = pendingQuery.Where(d => d.SharedByDeptId == deptId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var clean = search.Trim().ToLower();
+            query = query.Where(c => c.Title.ToLower().Contains(clean) || (c.CourseCode != null && c.CourseCode.ToLower().Contains(clean)));
+            pendingQuery = pendingQuery.Where(d => d.Title != null && d.Title.ToLower().Contains(clean));
+        }
+
         var courses = await query
             .Select(c => new { 
-                c.CourseId, 
-                c.Title, 
-                c.IsMandatory,
-                c.Status,
+                CourseId = c.CourseId, 
+                CourseCode = c.CourseCode,
+                Title = (string?)c.Title, 
+                Description = c.Description,
+                Level = c.Level,
+                CategoryId = c.CategoryId,
+                IsMandatory = (bool?)c.IsMandatory,
+                Status = (string?)c.Status,
+                StartDate = c.StartDate,
+                EndDate = c.EndDate,
+                TargetDepartmentId = c.TargetDepartmentId,
+                TargetDepartmentIds = c.TargetDepartmentIds,
                 moduleCount = c.CourseModules.Count(),
                 lessonCount = c.CourseModules.SelectMany(m => m.Lessons).Count(),
                 examCount = c.Exams.Count(),
@@ -481,18 +682,21 @@ public class HRController : Controller
             .ToListAsync();
 
         // Also include pending course requests from DocumentLibrary
-        var pendingQuery = _db.DocumentLibraries.AsQueryable();
-        if (!isTrainingCenter)
-        {
-            pendingQuery = pendingQuery.Where(d => d.SharedByDeptId == deptId);
-        }
         var pendingCourses = await pendingQuery
             .Where(d => d.TargetType == "course" && d.ApprovalStatus == "Pending")
             .Select(d => new {
                 CourseId = 0, // Not yet created
-                Title = d.Title,
+                CourseCode = (string?)null,
+                Title = (string?)d.Title,
+                Description = (string?)null,
+                Level = (int?)null,
+                CategoryId = (int?)null,
                 IsMandatory = (bool?)false, 
-                Status = "Pending",
+                Status = (string?)"Pending",
+                StartDate = (DateTime?)null,
+                EndDate = (DateTime?)null,
+                TargetDepartmentId = (int?)null,
+                TargetDepartmentIds = (string?)null,
                 moduleCount = 0,
                 lessonCount = 0,
                 examCount = 0,
@@ -506,22 +710,38 @@ public class HRController : Controller
 
     // NEW: Manager tạo khóa học cho phòng mình
     [HttpPost("/api/hr/courses")]
-    public async Task<IActionResult> CreateDeptCourse([FromBody] CreateCourseDto dto)
+    public async Task<IActionResult> CreateDeptCourse([FromBody] ItCreateCourseDto dto)
     {
         var auth = RequireManager();
         if (auth != null) return Json(new { error = "Unauthorized" });
 
-        int deptId = GetCurrentDeptId();
-        if (deptId == 0) return BadRequest("Chỉ Trưởng phòng mới có quyền này.");
+        await EnsureCompatibilitySchemaAsync();
 
+        if (string.IsNullOrWhiteSpace(dto.Title)) return BadRequest("Title is required");
+        if (string.IsNullOrWhiteSpace(dto.CourseCode)) return BadRequest(new { error = "Mã khóa học là bắt buộc." });
+
+        var normalizedTitle = dto.Title.Trim().ToLower();
+        var normalizedCode = dto.CourseCode.Trim().ToUpper();
+        if (await _db.Courses.AnyAsync(c => c.Title != null && c.Title.ToLower() == normalizedTitle))
+            return BadRequest(new { error = $"Khóa học {dto.Title.Trim()} đã tồn tại, không thể thêm." });
+        if (await _db.Courses.AnyAsync(c => c.CourseCode != null && c.CourseCode.ToUpper() == normalizedCode))
+            return BadRequest(new { error = $"Mã khóa học {dto.CourseCode.Trim()} đã tồn tại, không thể thêm." });
+
+        int deptId = GetCurrentDeptId();
         var course = new Course
         {
+            CourseCode = dto.CourseCode.Trim(),
             Title = dto.Title,
             Description = dto.Description,
-            OwnerDepartmentId = deptId,
-            TargetDepartmentId = deptId, // Mặc định đích là chính phòng mình
+            Level = NormalizeLevel(dto.Level),
+            CategoryId = dto.CategoryId,
+            Status = dto.Status ?? "Active",
             IsMandatory = dto.IsMandatory,
-            Status = "Published",
+            StartDate = dto.StartDate,
+            EndDate = dto.EndDate,
+            OwnerDepartmentId = deptId > 0 ? deptId : null,
+            TargetDepartmentId = dto.TargetDepartmentIds != null && dto.TargetDepartmentIds.Any() ? dto.TargetDepartmentIds.First() : null,
+            TargetDepartmentIds = dto.TargetDepartmentIds != null ? string.Join(",", dto.TargetDepartmentIds) : null,
             CreatedAt = DateTime.Now,
             CreatedBy = GetCurrentUserId()
         };
@@ -529,27 +749,137 @@ public class HRController : Controller
         _db.Courses.Add(course);
         await _db.SaveChangesAsync();
 
-        return Ok(new { success = true, courseId = course.CourseId });
+        if (dto.TargetDepartmentIds != null && dto.TargetDepartmentIds.Any() && course.IsMandatory == true)
+        {
+            var deptUsers = await _db.Users.Where(u => u.DepartmentId.HasValue && dto.TargetDepartmentIds.Contains(u.DepartmentId.Value) && u.Status == "Active").ToListAsync();
+            foreach (var u in deptUsers)
+            {
+                _db.TrainingAssignments.Add(new TrainingAssignment
+                {
+                    CourseId = course.CourseId,
+                    UserId = u.UserId,
+                    AssignedBy = course.CreatedBy,
+                    AssignedDate = DateTime.Now,
+                    DueDate = course.EndDate ?? DateTime.Now.AddDays(30),
+                    Priority = "High"
+                });
+            }
+            await _db.SaveChangesAsync();
+        }
+
+        return Ok(new { success = true, id = course.CourseId, courseId = course.CourseId });
     }
 
     [HttpPut("/api/hr/courses/{id}")]
-    public async Task<IActionResult> UpdateDeptCourse(int id, [FromBody] UpdateHrCourseDto dto)
+    public async Task<IActionResult> UpdateDeptCourse(int id, [FromBody] ItCreateCourseDto dto)
     {
         var auth = RequireManager();
         if (auth != null) return Json(new { error = "Unauthorized" });
 
-        int deptId = GetCurrentDeptId();
-        var course = await _db.Courses.FirstOrDefaultAsync(c => c.CourseId == id);
+        await EnsureCompatibilitySchemaAsync();
+
+        var course = await _db.Courses.FindAsync(id);
         if (course == null) return NotFound();
+
+        int deptId = GetCurrentDeptId();
         if (deptId > 0 && !IsTrainingCenter() && course.OwnerDepartmentId != deptId) return Forbid();
 
-        if (!string.IsNullOrWhiteSpace(dto.Title)) course.Title = dto.Title.Trim();
-        course.Description = dto.Description ?? course.Description;
-        if (dto.IsMandatory.HasValue) course.IsMandatory = dto.IsMandatory.Value;
-        if (!string.IsNullOrWhiteSpace(dto.Status)) course.Status = dto.Status;
+        var normalizedTitle = dto.Title?.Trim().ToLower();
+        var normalizedCode = dto.CourseCode?.Trim().ToUpper();
+        if (!string.IsNullOrWhiteSpace(normalizedTitle) &&
+            await _db.Courses.AnyAsync(c => c.CourseId != id && c.Title != null && c.Title.ToLower() == normalizedTitle))
+            return BadRequest(new { error = $"Khóa học {dto.Title!.Trim()} đã tồn tại, không thể cập nhật trùng." });
+        if (!string.IsNullOrWhiteSpace(normalizedCode) &&
+            await _db.Courses.AnyAsync(c => c.CourseId != id && c.CourseCode != null && c.CourseCode.ToUpper() == normalizedCode))
+            return BadRequest(new { error = $"Mã khóa học {dto.CourseCode!.Trim()} đã tồn tại, không thể cập nhật trùng." });
+
+        course.CourseCode = dto.CourseCode ?? course.CourseCode;
+        course.Title = dto.Title ?? course.Title;
+        course.Description = dto.Description;
+        course.Level = NormalizeLevel(dto.Level);
+        course.CategoryId = dto.CategoryId;
+        course.Status = dto.Status ?? course.Status;
+        course.IsMandatory = dto.IsMandatory;
+        course.StartDate = dto.StartDate;
+        course.EndDate = dto.EndDate;
+        
+        var assignments = await _db.TrainingAssignments.Where(ta => ta.CourseId == id).ToListAsync();
+        foreach (var ta in assignments)
+        {
+            ta.DueDate = dto.EndDate;
+        }
+        course.TargetDepartmentId = dto.TargetDepartmentIds != null && dto.TargetDepartmentIds.Any() ? dto.TargetDepartmentIds.First() : null;
+        course.TargetDepartmentIds = dto.TargetDepartmentIds != null ? string.Join(",", dto.TargetDepartmentIds) : null;
 
         await _db.SaveChangesAsync();
         return Ok(new { success = true });
+    }
+
+    [HttpDelete("/api/hr/courses/{id}")]
+    public async Task<IActionResult> DeleteDeptCourse(int id)
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        await EnsureCompatibilitySchemaAsync();
+
+        var course = await _db.Courses.FindAsync(id);
+        if (course == null) return NotFound();
+
+        int deptId = GetCurrentDeptId();
+        if (deptId > 0 && !IsTrainingCenter() && course.OwnerDepartmentId != deptId) return Forbid();
+
+        try
+        {
+            var strategy = _db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync<IActionResult>(async () =>
+            {
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    // 1. Xóa dữ liệu liên quan đến thi (Quiz/Exam)
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM UserAnswers WHERE UserExamID IN (SELECT UserExamID FROM UserExams WHERE ExamID IN (SELECT ExamID FROM Exams WHERE CourseID = {0}))", id);
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM QuizSessionStates WHERE UserExamID IN (SELECT UserExamID FROM UserExams WHERE ExamID IN (SELECT ExamID FROM Exams WHERE CourseID = {0}))", id);
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM UserExams WHERE ExamID IN (SELECT ExamID FROM Exams WHERE CourseID = {0})", id);
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM ExamQuestions WHERE ExamID IN (SELECT ExamID FROM Exams WHERE CourseID = {0})", id);
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM Exams WHERE CourseID = {0}", id);
+
+                    // 2. Xóa dữ liệu liên quan đến bài học (Lessons/Modules)
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM UserLessonLogs WHERE LessonID IN (SELECT LessonID FROM Lessons WHERE ModuleID IN (SELECT ModuleID FROM CourseModules WHERE CourseID = {0}))", id);
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM LessonAttachments WHERE LessonID IN (SELECT LessonID FROM Lessons WHERE ModuleID IN (SELECT ModuleID FROM CourseModules WHERE CourseID = {0}))", id);
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM Lessons WHERE ModuleID IN (SELECT ModuleID FROM CourseModules WHERE CourseID = {0})", id);
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM CourseModules WHERE CourseID = {0}", id);
+
+                    // 3. Xóa các quan hệ mức khóa học
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM Enrollments WHERE CourseID = {0}", id);
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM Certificates WHERE CourseID = {0}", id);
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM CourseFeedback WHERE CourseID = {0}", id);
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM CourseCosts WHERE CourseID = {0}", id);
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM PathCourses WHERE CourseID = {0}", id);
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM TrainingAssignments WHERE CourseID = {0}", id);
+
+                    // 4. Xóa sự kiện offline và điểm danh
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM AttendanceLogs WHERE EventID IN (SELECT EventID FROM OfflineTrainingEvents WHERE CourseID = {0})", id);
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM OfflineTrainingEvents WHERE CourseID = {0}", id);
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM DocumentLibrary WHERE CourseID = {0}", id);
+
+                    // 5. Xóa chính khóa học
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM Courses WHERE CourseID = {0}", id);
+
+                    await transaction.CommitAsync();
+                    return Ok(new { success = true });
+                }
+                catch (Exception)
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi xóa khóa học và dữ liệu liên quan: " + ex.Message });
+        }
     }
 
     [HttpGet("/api/hr/courses/{id}/content")]
@@ -558,46 +888,52 @@ public class HRController : Controller
         var auth = RequireManager();
         if (auth != null) return Json(new { error = "Unauthorized" });
 
-        int deptId = GetCurrentDeptId();
-        var course = await _db.Courses
-            .Include(c => c.CourseModules)
-                .ThenInclude(m => m.Lessons)
-            .Include(c => c.Exams)
-            .FirstOrDefaultAsync(c => c.CourseId == id);
-        if (course == null) return NotFound();
-        // Allow HR to load content of any course for linking documents
+        await EnsureCompatibilitySchemaAsync();
 
-
-        return Json(new
-        {
-            courseId = course.CourseId,
-            title = course.Title,
-            status = course.Status,
-            modules = course.CourseModules
-                .OrderBy(m => m.SortOrder)
-                .Select(m => new
-                {
-                    moduleId = m.ModuleId,
-                    title = m.Title,
-                    sortOrder = m.SortOrder,
-                    lessons = m.Lessons.OrderBy(l => l.SortOrder).Select(l => new
+        var modules = await _db.CourseModules
+            .Where(m => m.CourseId == id)
+            .OrderBy(m => m.SortOrder)
+            .Select(m => new {
+                m.ModuleId, m.Title, m.SortOrder, m.Level,
+                Lessons = m.Lessons.OrderBy(l => l.SortOrder)
+                    .Select(l => new
                     {
-                        lessonId = l.LessonId,
-                        title = l.Title,
-                        contentType = l.ContentType,
-                        contentBody = l.ContentBody,
-                        videoUrl = l.VideoUrl,
-                        sortOrder = l.SortOrder
-                    })
-                }),
-            exams = course.Exams.Select(e => new
+                        l.LessonId,
+                        l.Title,
+                        l.ContentType,
+                        l.VideoUrl,
+                        l.ContentBody,
+                        l.Level,
+                        Attachments = l.LessonAttachments.Select(a => new { a.AttachmentId, a.FileName, a.FilePath }).ToList()
+                    }).ToList()
+            }).ToListAsync();
+        
+        var exams = await _db.Exams
+            .Where(e => e.CourseId == id)
+            .Select(e => new {
+                e.ExamId, e.ExamTitle, e.DurationMinutes, e.PassScore, e.Level,
+                e.MaxAttempts, e.StartDate, e.EndDate, e.TargetDepartmentId,
+                QuestionsCount = _db.ExamQuestions.Count(q => q.ExamId == e.ExamId)
+            }).ToListAsync();
+
+        var documents = modules
+            .SelectMany(m => m.Lessons.SelectMany(l => l.Attachments.Select(a => new
             {
-                examId = e.ExamId,
-                examTitle = e.ExamTitle,
-                durationMinutes = e.DurationMinutes,
-                passScore = e.PassScore
-            })
-        });
+                moduleId = m.ModuleId,
+                moduleTitle = m.Title,
+                lessonId = l.LessonId,
+                lessonTitle = l.Title,
+                attachmentId = a.AttachmentId,
+                fileName = a.FileName,
+                filePath = a.FilePath
+            })))
+            .ToList();
+
+        var course = await _db.Courses.FindAsync(id);
+        var courseTitle = course?.Title ?? "";
+        var courseStatus = course?.Status ?? "";
+
+        return Json(new { courseId = id, title = courseTitle, status = courseStatus, modules, exams, documents });
     }
 
     [HttpPost("/api/hr/courses/{courseId}/modules")]
@@ -623,31 +959,7 @@ public class HRController : Controller
         return Ok(new { success = true, moduleId = module.ModuleId });
     }
 
-    [HttpPost("/api/hr/modules/{moduleId}/lessons")]
-    public async Task<IActionResult> CreateCourseLesson(int moduleId, [FromBody] HrCreateLessonDto dto)
-    {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
 
-        var module = await _db.CourseModules.Include(m => m.Course).FirstOrDefaultAsync(m => m.ModuleId == moduleId);
-        if (module?.Course == null) return NotFound();
-        int deptId = GetCurrentDeptId();
-        if (deptId > 0 && !IsTrainingCenter() && module.Course.OwnerDepartmentId != deptId) return Forbid();
-        if (string.IsNullOrWhiteSpace(dto.Title)) return BadRequest(new { error = "Tên bài học là bắt buộc." });
-
-        var lesson = new Lesson
-        {
-            ModuleId = moduleId,
-            Title = dto.Title.Trim(),
-            ContentType = string.IsNullOrWhiteSpace(dto.ContentType) ? "Document" : dto.ContentType,
-            ContentBody = dto.ContentBody,
-            VideoUrl = dto.VideoUrl,
-            SortOrder = dto.SortOrder ?? 0
-        };
-        _db.Lessons.Add(lesson);
-        await _db.SaveChangesAsync();
-        return Ok(new { success = true, lessonId = lesson.LessonId });
-    }
 
     [HttpPost("/api/hr/courses/{courseId}/publish")]
     public async Task<IActionResult> PublishCourse(int courseId, [FromBody] HrPublishCourseDto dto)
@@ -706,6 +1018,45 @@ public class HRController : Controller
         return Json(docs);
     }
 
+    [HttpGet("/api/hr/documents/{id}")]
+    public async Task<IActionResult> GetDocumentById(int id)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var doc = await (from d in _db.DocumentLibraries
+                          where d.Id == id
+                          join c in _db.Courses on d.CourseId equals c.CourseId into cj
+                          from c in cj.DefaultIfEmpty()
+                          join m in _db.CourseModules on d.ModuleId equals m.ModuleId into mj
+                          from m in mj.DefaultIfEmpty()
+                          join l in _db.Lessons on d.LessonId equals l.LessonId into lj
+                          from l in lj.DefaultIfEmpty()
+                          join e in _db.Exams on d.ExamId equals e.ExamId into ej
+                          from e in ej.DefaultIfEmpty()
+                          select new
+                          {
+                              id = d.Id,
+                              title = d.Title,
+                              filePath = d.FilePath,
+                              createdBy = d.CreatedBy,
+                              approvalStatus = d.ApprovalStatus ?? "Pending",
+                              rejectionReason = d.RejectionReason,
+                              courseName = c != null ? c.Title : null,
+                              moduleName = m != null ? m.Title : null,
+                              lessonName = l != null ? l.Title : null,
+                              examName = e != null ? e.ExamTitle : null,
+                              newModuleName = d.NewModuleName,
+                              newLessonName = d.NewLessonName,
+                              newExamName = d.NewExamName,
+                              pendingData = d.PendingData,
+                              targetType = d.TargetType
+                          }).FirstOrDefaultAsync();
+
+        if (doc == null) return NotFound();
+        return Json(doc);
+    }
+
     [HttpPost("/api/hr/documents")]
     public async Task<IActionResult> UploadDocument([FromBody] UploadDocDto dto)
     {
@@ -749,10 +1100,111 @@ public class HRController : Controller
         try {
             _db.DocumentLibraries.Add(doc);
             await _db.SaveChangesAsync();
+
+            // Send notification to Training Center Manager
+            try {
+                var trainingDept = await _db.Departments.FirstOrDefaultAsync(d => d.DepartmentName == "Trung tâm Đào tạo Nội bộ");
+                if (trainingDept != null && trainingDept.ManagerId.HasValue)
+                {
+                    var senderUser = await _db.Users.FindAsync(userId);
+                    var senderName = senderUser?.FullName ?? senderUser?.Username ?? "Trưởng bộ phận";
+                    
+                    var prefix = $"[ĐỀ XUẤT - ID:{doc.Id}] ";
+                    var body = $"[{senderName}] đã gửi đề xuất mới: '{doc.Title}'. Vui lòng xem xét phê duyệt.";
+                    var notifTitle = prefix + body;
+                    if (notifTitle.Length > 255)
+                    {
+                        notifTitle = notifTitle.Substring(0, 252) + "...";
+                    }
+
+                    int nextNotifId = 1;
+                    if (await _db.Notifications.AnyAsync())
+                    {
+                        nextNotifId = await _db.Notifications.MaxAsync(n => n.Id) + 1;
+                    }
+
+                    var notification = new Notification
+                    {
+                        Id = nextNotifId,
+                        UserId = trainingDept.ManagerId.Value,
+                        Title = notifTitle,
+                        IsRead = false
+                    };
+                    _db.Notifications.Add(notification);
+                    await _db.SaveChangesAsync();
+                }
+            } catch (Exception) {
+                // Prevent notification errors from breaking the main document upload flow
+            }
+
             return Ok(new { success = true });
         } catch (Exception ex) {
             return StatusCode(500, new { error = "Lỗi lưu tài liệu: " + ex.Message, detail = ex.InnerException?.Message });
         }
+    }
+
+    [HttpPost("/api/hr/upload-temp")]
+    public async Task<IActionResult> UploadTempFile(IFormFile? file)
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        if (file == null || file.Length == 0) return BadRequest(new { error = "File không hợp lệ hoặc rỗng." });
+
+        var uploadsRoot = Path.Combine(_env.WebRootPath, "uploads", "temp");
+        Directory.CreateDirectory(uploadsRoot);
+
+        var safeFileName = $"{DateTime.Now:yyyyMMddHHmmss}_{Path.GetFileName(file.FileName)}";
+        var fullPath = Path.Combine(uploadsRoot, safeFileName);
+
+        await using (var stream = System.IO.File.Create(fullPath))
+        {
+            await file.CopyToAsync(stream);
+        }
+
+        return Ok(new { filePath = $"/uploads/temp/{safeFileName}" });
+    }
+
+    [HttpPost("/api/hr/generate-quiz-ai")]
+    public async Task<IActionResult> GenerateQuizAI([FromBody] PromptDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        var topic = dto.Prompt?.Trim() ?? "Bài tập tổng quát";
+        var generatedData = await _aiService.GenerateQuizAsync(topic);
+
+        return Ok(generatedData);
+    }
+
+    [HttpPost("/api/hr/generate-module-ai")]
+    public async Task<IActionResult> GenerateModuleAI([FromBody] PromptDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+        var result = await _aiService.GenerateModuleAsync(dto.Prompt ?? "Chương mới");
+        return Ok(result);
+    }
+
+    [HttpPost("/api/hr/generate-lesson-ai")]
+    public async Task<IActionResult> GenerateLessonAI([FromBody] PromptDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+        var result = await _aiService.GenerateLessonAsync(dto.Prompt ?? "Bài học mới");
+        return Ok(result);
+    }
+
+    [HttpPost("/api/hr/generate-quiz-from-file")]
+    public async Task<IActionResult> GenerateQuizFromFileAI([FromBody] PromptFileDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        if (string.IsNullOrEmpty(dto.Base64Data)) return BadRequest("File data is required");
+        
+        var generatedData = await _aiService.GenerateQuizFromDocumentAsync(dto.Base64Data, dto.MimeType);
+        return Ok(generatedData);
     }
 
     // NEW: Broadcast khóa học cho tất cả phòng ban
@@ -791,6 +1243,31 @@ public class HRController : Controller
         int targetDeptId = (isTrainingCenter && dto.DepartmentId > 0) ? dto.DepartmentId : userDeptId;
         int currentUserId = GetCurrentUserId();
 
+        var course = await _db.Courses.FindAsync(dto.CourseId);
+        if (course == null) return NotFound(new { error = "Khóa học không tồn tại." });
+
+        if (course.EndDate.HasValue && course.EndDate.Value.Date < DateTime.Today)
+        {
+            return BadRequest(new { error = "Khóa học này đã kết thúc, không thể phân công." });
+        }
+
+        DateTime? finalDueDate = dto.DueDate;
+        if (!finalDueDate.HasValue)
+        {
+            finalDueDate = course.EndDate;
+        }
+        else
+        {
+            if (course.EndDate.HasValue && finalDueDate.Value.Date > course.EndDate.Value.Date)
+            {
+                return BadRequest(new { error = $"Hạn hoàn thành không được muộn hơn ngày kết thúc của khóa học ({course.EndDate.Value:dd/MM/yyyy})." });
+            }
+            if (finalDueDate.Value.Date < DateTime.Today)
+            {
+                return BadRequest(new { error = "Hạn hoàn thành không được sớm hơn ngày hiện tại." });
+            }
+        }
+
         var users = await _db.Users
             .Where(u => u.DepartmentId == targetDeptId && u.Status == "Active" && u.UserId != currentUserId)
             .ToListAsync();
@@ -808,7 +1285,7 @@ public class HRController : Controller
                     CourseId = dto.CourseId,
                     AssignedBy = GetCurrentUserId(),
                     AssignedDate = DateTime.Now,
-                    DueDate = dto.DueDate,
+                    DueDate = finalDueDate,
                     Priority = "High"
                 });
 
@@ -820,7 +1297,6 @@ public class HRController : Controller
         }
 
         // Cập nhật TargetDepartmentId và TargetDepartmentIds của khóa học để học viên mới sau này tự động được giao / xem thấy
-        var course = await _db.Courses.FindAsync(dto.CourseId);
         if (course != null)
         {
             if (course.TargetDepartmentId == null || course.TargetDepartmentId == userDeptId)
@@ -955,6 +1431,236 @@ public class HRController : Controller
         return Ok(new { success = true, courseId = course.CourseId, title = course.Title, modulesCreated = generatedData.Modules.Count });
     }
 
+    [HttpPost("/api/hr/ai-create-course-from-word")]
+    public async Task<IActionResult> CreateCourseFromWord([FromBody] ImportCourseFileDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        int deptId = GetCurrentDeptId();
+        if (deptId == 0) return BadRequest("Chỉ Trưởng phòng mới có quyền này.");
+
+        if (string.IsNullOrEmpty(dto.Base64Data)) return BadRequest("Dữ liệu file trống.");
+
+        try
+        {
+            byte[] fileBytes = Convert.FromBase64String(dto.Base64Data);
+            string wordText = "";
+
+            using (var ms = new System.IO.MemoryStream(fileBytes))
+            {
+                using (var doc = Xceed.Words.NET.DocX.Load(ms))
+                {
+                    var linesList = new List<string>();
+                    foreach (var p in doc.Paragraphs)
+                    {
+                        var t = p.Text.Trim();
+                        if (!string.IsNullOrEmpty(t)) linesList.Add(t);
+                    }
+                    foreach (var table in doc.Tables)
+                    {
+                        foreach (var row in table.Rows)
+                        {
+                            foreach (var cell in row.Cells)
+                            {
+                                foreach (var p in cell.Paragraphs)
+                                {
+                                    var t = p.Text.Trim();
+                                    if (!string.IsNullOrEmpty(t)) linesList.Add(t);
+                                }
+                            }
+                        }
+                    }
+                    wordText = string.Join("\n", linesList);
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(wordText))
+            {
+                return BadRequest("Không trích xuất được nội dung từ file Word.");
+            }
+
+            // Gọi AI phân tích và sinh cấu trúc khóa học bao gồm bài học
+            var generatedData = await _aiService.GenerateCourseFromWordTextAsync(wordText);
+
+            // Lưu khóa học vào DB
+            var course = new Course
+            {
+                Title = generatedData.Title,
+                Description = generatedData.Description,
+                CourseCode = await GenerateUniqueCourseCode(generatedData.Title),
+                OwnerDepartmentId = deptId,
+                TargetDepartmentId = deptId,
+                IsMandatory = false,
+                Status = "Published",
+                CreatedAt = DateTime.Now,
+                CreatedBy = GetCurrentUserId()
+            };
+            _db.Courses.Add(course);
+            await _db.SaveChangesAsync();
+
+            int moduleOrder = 1;
+            foreach (var mod in generatedData.Modules)
+            {
+                var module = new CourseModule
+                {
+                    CourseId = course.CourseId,
+                    Title = mod.Title,
+                    SortOrder = moduleOrder++
+                };
+                _db.CourseModules.Add(module);
+                await _db.SaveChangesAsync();
+
+                int lessonOrder = 1;
+                var lessonContents = new StringBuilder();
+                foreach (var lessonData in mod.Lessons)
+                {
+                    var lesson = new Lesson
+                    {
+                        ModuleId = module.ModuleId,
+                        Title = lessonData.Title,
+                        ContentType = "Document",
+                        ContentBody = lessonData.ContentBody,
+                        SortOrder = lessonOrder++
+                    };
+                    _db.Lessons.Add(lesson);
+                    lessonContents.AppendLine($"<h3>{lessonData.Title}</h3>");
+                    lessonContents.AppendLine(lessonData.ContentBody);
+                }
+                await _db.SaveChangesAsync();
+
+                // Sinh quiz tự động cho chương này nếu có bài học
+                if (mod.Lessons.Count > 0)
+                {
+                    try
+                    {
+                        var quizData = await _aiService.GenerateQuizFromLessonsAsync(mod.Title, lessonContents.ToString());
+                        var exam = new Exam
+                        {
+                            CourseId = course.CourseId,
+                            ModuleId = module.ModuleId,
+                            ExamTitle = quizData.ExamTitle,
+                            DurationMinutes = quizData.DurationMinutes,
+                            PassScore = 80,
+                            MaxAttempts = 3,
+                            StartDate = DateTime.Now,
+                            EndDate = DateTime.Now.AddYears(1),
+                            TargetDepartmentId = deptId
+                        };
+                        _db.Exams.Add(exam);
+                        await _db.SaveChangesAsync();
+
+                        foreach (var qDto in quizData.Questions)
+                        {
+                            var question = new QuestionBank
+                            {
+                                QuestionText = qDto.QuestionText,
+                                QuestionType = qDto.QuestionType,
+                                Difficulty = "Medium"
+                            };
+                            _db.QuestionBanks.Add(question);
+                            await _db.SaveChangesAsync();
+
+                            if (qDto.QuestionType == "MultipleChoice")
+                            {
+                                foreach (var optDto in qDto.Options)
+                                {
+                                    var option = new QuestionOption
+                                    {
+                                        QuestionId = question.QuestionId,
+                                        OptionText = optDto.OptionText,
+                                        IsCorrect = optDto.IsCorrect
+                                    };
+                                    _db.QuestionOptions.Add(option);
+                                }
+                            }
+                            else if (qDto.QuestionType == "FillInTheBlank")
+                            {
+                                var option = new QuestionOption
+                                {
+                                    QuestionId = question.QuestionId,
+                                    OptionText = qDto.Options.Count > 0 ? qDto.Options[0].OptionText : "",
+                                    IsCorrect = true
+                                };
+                                _db.QuestionOptions.Add(option);
+                            }
+
+                            var eq = new ExamQuestion
+                            {
+                                ExamId = exam.ExamId,
+                                QuestionId = question.QuestionId,
+                                Points = qDto.Points
+                            };
+                            _db.ExamQuestions.Add(eq);
+                        }
+                        await _db.SaveChangesAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Lỗi tự động sinh quiz cho chương {mod.Title}: {ex.Message}");
+                    }
+                }
+            }
+
+            return Ok(new { success = true, courseId = course.CourseId, title = course.Title, code = course.CourseCode });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi nhập khóa học từ Word: " + ex.Message });
+        }
+    }
+
+    private async Task<string> GenerateUniqueCourseCode(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            title = "Course";
+        }
+
+        string cleanTitle = title.Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder();
+        foreach (var c in cleanTitle)
+        {
+            var uc = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+            if (uc != System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                sb.Append(c);
+            }
+        }
+        string asciiTitle = sb.ToString().Replace("đ", "d").Replace("Đ", "D");
+
+        var words = asciiTitle.Split(new[] { ' ', '-', '_', '/' }, StringSplitOptions.RemoveEmptyEntries);
+        var initialsBuilder = new System.Text.StringBuilder();
+        foreach (var w in words)
+        {
+            if (w.Length > 0 && char.IsLetterOrDigit(w[0]))
+            {
+                initialsBuilder.Append(char.ToUpper(w[0]));
+            }
+        }
+
+        string prefix = initialsBuilder.ToString();
+        if (string.IsNullOrWhiteSpace(prefix))
+        {
+            prefix = "CRSE";
+        }
+        
+        if (prefix.Length > 6)
+        {
+            prefix = prefix.Substring(0, 6);
+        }
+
+        int counter = 101;
+        string candidateCode = $"{prefix}{counter}";
+        while (await _db.Courses.AnyAsync(c => c.CourseCode == candidateCode))
+        {
+            counter++;
+            candidateCode = $"{prefix}{counter}";
+        }
+
+        return candidateCode;
+    }
+
     // ============================================================
     // NEW API: QUẢN LÝ TIẾN ĐỘ & ĐIỂM DANH (GIẢNG VIÊN / HR)
     // ============================================================
@@ -975,6 +1681,11 @@ public class HRController : Controller
 
         foreach (var u in users)
         {
+            // Lấy các phân công khóa học (TrainingAssignments) của nhân viên này
+            var userAssignments = await _db.TrainingAssignments
+                .Where(ta => ta.UserId == u.UserId)
+                .ToListAsync();
+
             // Get enrolled courses for this user
             var enrolledCourseIds = await _db.Enrollments
                 .Where(e => e.UserId == u.UserId)
@@ -1004,6 +1715,12 @@ public class HRController : Controller
                 // An exam is incomplete if the student hasn't passed it with the required score
                 if (bestScore < requiredScore)
                 {
+                    var ta = userAssignments
+                        .Where(a => a.CourseId == exam.CourseId)
+                        .OrderByDescending(a => a.DueDate ?? DateTime.MaxValue)
+                        .FirstOrDefault();
+                    var isOverdue = ta != null && ta.DueDate.HasValue && ta.DueDate.Value < DateTime.Now;
+
                     incompleteQuizzes.Add(new
                     {
                         examId = exam.ExamId,
@@ -1013,15 +1730,37 @@ public class HRController : Controller
                         maxAttempts = exam.MaxAttempts,
                         bestScore = bestScore,
                         hasUnfinished = hasUnfinished,
-                        passScore = requiredScore
+                        passScore = requiredScore,
+                        isOverdue = isOverdue,
+                        dueDate = ta?.DueDate,
+                        assignmentId = ta?.AssignmentId
                     });
                 }
             }
 
-            var missingLessons = await _db.Enrollments
+            var enrollments = await _db.Enrollments
+                .Include(e => e.Course)
                 .Where(e => e.UserId == u.UserId && e.Status != "Completed")
-                .Select(e => new { courseId = e.CourseId, title = e.Course != null ? e.Course.Title : "N/A" })
                 .ToListAsync();
+
+            var missingLessons = new List<object>();
+            foreach (var e in enrollments)
+            {
+                var ta = userAssignments
+                    .Where(a => a.CourseId == e.CourseId)
+                    .OrderByDescending(a => a.DueDate ?? DateTime.MaxValue)
+                    .FirstOrDefault();
+                var isOverdue = ta != null && ta.DueDate.HasValue && ta.DueDate.Value < DateTime.Now;
+
+                missingLessons.Add(new
+                {
+                    courseId = e.CourseId,
+                    title = e.Course?.Title ?? "N/A",
+                    isOverdue = isOverdue,
+                    dueDate = ta?.DueDate,
+                    assignmentId = ta?.AssignmentId
+                });
+            }
 
             resultList.Add(new
             {
@@ -1044,13 +1783,75 @@ public class HRController : Controller
         var user = await _db.Users.FindAsync(dto.UserId);
         if (user == null) return NotFound();
 
+        int nextNotifId = 1;
+        if (await _db.Notifications.AnyAsync())
+        {
+            nextNotifId = await _db.Notifications.MaxAsync(n => n.Id) + 1;
+        }
+
         var notification = new Notification
         {
+            Id = nextNotifId,
             UserId = dto.UserId,
             Title = "Nhắc nhở học tập: " + dto.Message,
             IsRead = false
         };
         _db.Notifications.Add(notification);
+        await _db.SaveChangesAsync();
+
+        return Ok(new { success = true });
+    }
+
+    [HttpGet("/api/hr/notifications")]
+    public async Task<IActionResult> GetHrNotifications()
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        var userId = GetCurrentUserId();
+        var notifications = await _db.Notifications
+            .Where(n => n.UserId == userId)
+            .OrderByDescending(n => n.Id)
+            .Take(50)
+            .Select(n => new
+            {
+                id = n.Id,
+                title = n.Title,
+                isRead = n.IsRead ?? false
+            })
+            .ToListAsync();
+
+        return Json(notifications);
+    }
+
+    [HttpPost("/api/hr/notifications/{id}/read")]
+    public async Task<IActionResult> MarkHrNotificationRead(int id)
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        var userId = GetCurrentUserId();
+        var notif = await _db.Notifications.FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId);
+        if (notif == null) return NotFound();
+
+        notif.IsRead = true;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("/api/hr/notifications/read-all")]
+    public async Task<IActionResult> MarkAllHrNotificationsRead()
+    {
+        var auth = RequireManager();
+        if (auth != null) return Json(new { error = "Unauthorized" });
+
+        var userId = GetCurrentUserId();
+        var unread = await _db.Notifications.Where(n => n.UserId == userId && n.IsRead != true).ToListAsync();
+        foreach (var n in unread)
+        {
+            n.IsRead = true;
+        }
         await _db.SaveChangesAsync();
 
         return Ok(new { success = true });
@@ -1292,146 +2093,11 @@ public class HRController : Controller
         return str;
     }
 
-    [HttpPost("/api/hr/assignments/{id}/extend")]
-    [HttpPost("/api/hr/extend-assignment")]
-    public async Task<IActionResult> ExtendAssignment(int id, [FromBody] ExtendAssignmentDto dto)
-    {
-        var userId = GetCurrentUserId();
-        if (userId <= 0) return Unauthorized();
-
-        var assignment = await _db.TrainingAssignments.FindAsync(id);
-        if (assignment == null) return NotFound("Không tìm thấy phân công đào tạo.");
-
-        var finalDueDate = dto.NewDueDate ?? dto.DueDate;
-        assignment.DueDate = finalDueDate;
-        
-        var studentId = assignment.UserId;
-        if (studentId.HasValue)
-        {
-            var course = await _db.Courses.FindAsync(assignment.CourseId);
-            var courseTitle = course?.Title ?? "Khóa học";
-            
-            var notification = new Notification
-            {
-                UserId = studentId.Value,
-                Title = $"[GIA HẠN] Khóa học '{courseTitle}' của bạn đã được gia hạn hạn hoàn thành mới là {finalDueDate?.ToString("dd/MM/yyyy HH:mm") ?? "không thời hạn"}.",
-                IsRead = false
-            };
-            _db.Notifications.Add(notification);
-        }
-
-        await _db.SaveChangesAsync();
-        return Ok(new { success = true });
-    }
-
-    [HttpGet("/api/hr/notifications")]
-    public async Task<IActionResult> GetHrNotifications()
-    {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
-
-        var userId = GetCurrentUserId();
-        var notifications = await _db.Notifications
-            .Where(n => n.UserId == userId)
-            .OrderByDescending(n => n.Id)
-            .Take(50)
-            .Select(n => new
-            {
-                id = n.Id,
-                title = n.Title,
-                isRead = n.IsRead ?? false
-            })
-            .ToListAsync();
-
-        return Json(notifications);
-    }
-
-    [HttpPost("/api/hr/notifications/{id}/read")]
-    public async Task<IActionResult> MarkHrNotificationRead(int id)
-    {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
-
-        var userId = GetCurrentUserId();
-        var notif = await _db.Notifications.FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId);
-        if (notif == null) return NotFound();
-
-        notif.IsRead = true;
-        await _db.SaveChangesAsync();
-
-        return Ok(new { success = true });
-    }
-
-    [HttpPost("/api/hr/notifications/read-all")]
-    public async Task<IActionResult> MarkAllHrNotificationsRead()
-    {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
-
-        var userId = GetCurrentUserId();
-        var unread = await _db.Notifications.Where(n => n.UserId == userId && n.IsRead != true).ToListAsync();
-        foreach (var n in unread)
-        {
-            n.IsRead = true;
-        }
-        await _db.SaveChangesAsync();
-
-        return Ok(new { success = true });
-    }
-
-    [HttpGet("/api/hr/exams-with-stats")]
-    public async Task<IActionResult> GetExamsWithStats()
-    {
-        var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
-
-        int deptId = GetCurrentDeptId();
-        var currentDept = await _db.Departments.FindAsync(deptId);
-        bool isTrainingCenter = currentDept?.DepartmentName == "Trung tâm Đào tạo Nội bộ";
-
-        var query = _db.Exams.AsQueryable();
-        if (!isTrainingCenter)
-        {
-            query = query.Where(e => e.Course == null 
-                                  || e.Course.IsForAllDepartments == true 
-                                  || e.Course.TargetDepartmentId == null 
-                                  || e.Course.TargetDepartmentId == deptId 
-                                  || e.Course.OwnerDepartmentId == deptId 
-                                  || e.TargetDepartmentId == deptId);
-        }
-
-        var exams = await query
-            .Include(e => e.Course)
-            .Include(e => e.ExamQuestions)
-            .Include(e => e.UserExams)
-            .OrderByDescending(e => e.ExamId)
-            .Select(e => new
-            {
-                examId = e.ExamId,
-                examTitle = e.ExamTitle,
-                durationMinutes = e.DurationMinutes ?? 30,
-                passScore = e.PassScore ?? 50m,
-                maxAttempts = e.MaxAttempts,
-                courseId = e.CourseId,
-                courseTitle = e.Course != null ? e.Course.Title : null,
-                questionsCount = e.ExamQuestions.Count,
-                passedCount = e.UserExams.Count(ue => ue.IsFinish == true && (ue.Score ?? 0) >= (e.PassScore ?? 50m)),
-                failedCount = e.UserExams.Count(ue => ue.IsFinish == true && (ue.Score ?? 0) < (e.PassScore ?? 50m)),
-                startDate = e.StartDate,
-                endDate = e.EndDate,
-                targetDepartmentId = e.TargetDepartmentId,
-                level = e.Level
-            })
-            .ToListAsync();
-
-        return Json(exams);
-    }
-
     [HttpGet("/api/hr/questions-pool")]
     public async Task<IActionResult> GetQuestionsPool()
     {
         var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
+        if (auth != null) return auth;
 
         var questions = await _db.QuestionBanks
             .Include(q => q.QuestionOptions)
@@ -1454,11 +2120,224 @@ public class HRController : Controller
         return Json(questions);
     }
 
+    [HttpPost("/api/hr/questions-pool")]
+    public async Task<IActionResult> CreateQuestionInPool([FromBody] QuestionPoolItemDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        if (string.IsNullOrWhiteSpace(dto.QuestionText))
+            return BadRequest(new { error = "Nội dung câu hỏi là bắt buộc." });
+
+        try
+        {
+            var strategy = _db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync<IActionResult>(async () =>
+            {
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    var q = new QuestionBank
+                    {
+                        QuestionText = dto.QuestionText.Trim(),
+                        QuestionType = dto.QuestionType ?? "MultipleChoice",
+                        Difficulty = dto.Difficulty ?? "Medium"
+                    };
+                    _db.QuestionBanks.Add(q);
+                    await _db.SaveChangesAsync();
+
+                    if (dto.Options != null && (dto.QuestionType == "MultipleChoice" || dto.QuestionType == "FillInTheBlank"))
+                    {
+                        foreach (var opt in dto.Options)
+                        {
+                            if (string.IsNullOrWhiteSpace(opt.OptionText)) continue;
+                            _db.QuestionOptions.Add(new QuestionOption
+                            {
+                                QuestionId = q.QuestionId,
+                                OptionText = opt.OptionText.Trim(),
+                                IsCorrect = opt.IsCorrect
+                            });
+                        }
+                        await _db.SaveChangesAsync();
+                    }
+
+                    await transaction.CommitAsync();
+                    return Ok(new { success = true, questionId = q.QuestionId });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi tạo câu hỏi: " + ex.Message });
+        }
+    }
+
+    [HttpPut("/api/hr/questions-pool/{id}")]
+    public async Task<IActionResult> UpdateQuestionInPool(int id, [FromBody] QuestionPoolItemDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var q = await _db.QuestionBanks.Include(x => x.QuestionOptions).FirstOrDefaultAsync(x => x.QuestionId == id);
+        if (q == null) return NotFound();
+
+        if (string.IsNullOrWhiteSpace(dto.QuestionText))
+            return BadRequest(new { error = "Nội dung câu hỏi là bắt buộc." });
+
+        try
+        {
+            var strategy = _db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync<IActionResult>(async () =>
+            {
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    q.QuestionText = dto.QuestionText.Trim();
+                    q.QuestionType = dto.QuestionType ?? "MultipleChoice";
+                    q.Difficulty = dto.Difficulty ?? "Medium";
+
+                    // Remove old options
+                    _db.QuestionOptions.RemoveRange(q.QuestionOptions);
+                    await _db.SaveChangesAsync();
+
+                    if (dto.Options != null && (dto.QuestionType == "MultipleChoice" || dto.QuestionType == "FillInTheBlank"))
+                    {
+                        foreach (var opt in dto.Options)
+                        {
+                            if (string.IsNullOrWhiteSpace(opt.OptionText)) continue;
+                            _db.QuestionOptions.Add(new QuestionOption
+                            {
+                                QuestionId = q.QuestionId,
+                                OptionText = opt.OptionText.Trim(),
+                                IsCorrect = opt.IsCorrect
+                            });
+                        }
+                        await _db.SaveChangesAsync();
+                    }
+
+                    await transaction.CommitAsync();
+                    return Ok(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi cập nhật câu hỏi: " + ex.Message });
+        }
+    }
+
+    [HttpDelete("/api/hr/questions-pool/{id}")]
+    public async Task<IActionResult> DeleteQuestionInPool(int id)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var q = await _db.QuestionBanks.FindAsync(id);
+        if (q == null) return NotFound();
+
+        try
+        {
+            var strategy = _db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync<IActionResult>(async () =>
+            {
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    // Remove options
+                    var options = await _db.QuestionOptions.Where(o => o.QuestionId == id).ToListAsync();
+                    _db.QuestionOptions.RemoveRange(options);
+
+                    // Remove links to exams
+                    var links = await _db.ExamQuestions.Where(eq => eq.QuestionId == id).ToListAsync();
+                    _db.ExamQuestions.RemoveRange(links);
+
+                    // Remove student answers
+                    var answers = await _db.UserAnswers.Where(a => a.QuestionId == id).ToListAsync();
+                    _db.UserAnswers.RemoveRange(answers);
+
+                    _db.QuestionBanks.Remove(q);
+                    await _db.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+                    return Ok(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi xóa câu hỏi: " + ex.Message });
+        }
+    }
+
+    [HttpGet("/api/hr/exams-with-stats")]
+    public async Task<IActionResult> GetExamsWithStats()
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var userDeptId = GetCurrentDeptId();
+        var isTrainingCenter = IsTrainingCenter();
+
+        var exams = await _db.Exams
+            .Include(e => e.Course)
+            .Include(e => e.ExamQuestions)
+            .Include(e => e.UserExams)
+                .ThenInclude(ue => ue.User)
+            .OrderByDescending(e => e.ExamId)
+            .Select(e => new
+            {
+                examId = e.ExamId,
+                examTitle = e.ExamTitle,
+                durationMinutes = e.DurationMinutes ?? 30,
+                passScore = e.PassScore ?? 50m,
+                maxAttempts = e.MaxAttempts,
+                courseId = e.CourseId,
+                courseTitle = e.Course != null ? e.Course.Title : null,
+                questionsCount = e.ExamQuestions.Count,
+                passedCount = e.UserExams.Count(ue => ue.IsFinish == true && (ue.Score ?? 0) >= (e.PassScore ?? 50m) && (isTrainingCenter || (ue.User != null && ue.User.DepartmentId == userDeptId))),
+                failedCount = e.UserExams.Count(ue => ue.IsFinish == true && (ue.Score ?? 0) < (e.PassScore ?? 50m) && (isTrainingCenter || (ue.User != null && ue.User.DepartmentId == userDeptId)))
+            })
+            .ToListAsync();
+
+        return Json(exams);
+    }
+
+    [HttpGet("/api/hr/categories")]
+    public async Task<IActionResult> GetCategories()
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var cats = await _db.Categories
+            .Select(c => new
+            {
+                categoryId = c.CategoryId,
+                categoryName = c.CategoryName
+            })
+            .ToListAsync();
+        return Json(cats);
+    }
+
     [HttpGet("/api/hr/exams/{examId}/questions")]
     public async Task<IActionResult> GetExamQuestions(int examId)
     {
         var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
+        if (auth != null) return auth;
 
         var questions = await _db.ExamQuestions
             .Include(eq => eq.Question)
@@ -1467,18 +2346,67 @@ public class HRController : Controller
             .Select(eq => new {
                 eq.QuestionId, 
                 eq.Points,
-                eq.Question.QuestionText,
+                questionText = eq.Question.QuestionText,
+                questionType = eq.Question.QuestionType ?? "MultipleChoice",
                 Options = eq.Question.QuestionOptions.Select(o => new { o.OptionId, o.OptionText, o.IsCorrect }).ToList()
             }).ToListAsync();
 
         return Json(questions);
     }
 
+    [HttpPost("/api/hr/exams/{examId}/save-structure")]
+    public async Task<IActionResult> SaveExamStructure(int examId, [FromBody] List<int> questionIds)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var exam = await _db.Exams.FindAsync(examId);
+        if (exam == null) return NotFound(new { error = "Không tìm thấy bài thi." });
+
+        try
+        {
+            var strategy = _db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync<IActionResult>(async () =>
+            {
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    var oldLinks = await _db.ExamQuestions.Where(eq => eq.ExamId == examId).ToListAsync();
+                    _db.ExamQuestions.RemoveRange(oldLinks);
+                    await _db.SaveChangesAsync();
+
+                    foreach (var qId in questionIds)
+                    {
+                        _db.ExamQuestions.Add(new ExamQuestion
+                        {
+                            ExamId = examId,
+                            QuestionId = qId,
+                            Points = 10 // Default points per question
+                        });
+                    }
+                    await _db.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+                    return Ok(new { success = true });
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi lưu cấu trúc bài thi: " + ex.Message });
+        }
+    }
+
     [HttpGet("/api/hr/exams/{examId}/participants")]
     public async Task<IActionResult> GetExamParticipants(int examId)
     {
         var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
+        if (auth != null) return auth;
 
         var exam = await _db.Exams.Include(e => e.Course).FirstOrDefaultAsync(e => e.ExamId == examId);
         if (exam == null) return NotFound(new { error = "Không tìm thấy bài thi." });
@@ -1499,6 +2427,14 @@ public class HRController : Controller
                     .ThenInclude(u => u.Department)
                 .Where(e => e.CourseId == courseId && e.User != null && e.User.Status == "Active")
                 .ToListAsync();
+        }
+
+        int userDeptId = GetCurrentDeptId();
+        bool isTrainingCenter = IsTrainingCenter();
+        if (!isTrainingCenter)
+        {
+            enrollments = enrollments.Where(e => e.User != null && e.User.DepartmentId == userDeptId).ToList();
+            userExams = userExams.Where(ue => ue.User != null && ue.User.DepartmentId == userDeptId).ToList();
         }
 
         var allUsersMap = new Dictionary<int, User>();
@@ -1569,14 +2505,45 @@ public class HRController : Controller
         return Json(participants);
     }
 
-    [HttpPost("/api/hr/exams/{examId}/save-structure")]
-    public async Task<IActionResult> SaveExamStructure(int examId, [FromBody] List<int> questionIds)
+    [HttpPost("/api/hr/courses/{courseId}/exams")]
+    public async Task<IActionResult> CreateExam(int courseId, [FromBody] ItCreateExamDto dto)
     {
         var auth = RequireManager();
-        if (auth != null) return Json(new { error = "Unauthorized" });
+        if (auth != null) return auth;
 
-        var exam = await _db.Exams.FindAsync(examId);
-        if (exam == null) return NotFound(new { error = "Không tìm thấy bài thi." });
+        if (string.IsNullOrWhiteSpace(dto.ExamTitle))
+            return BadRequest(new { error = "Tên quiz là bắt buộc." });
+
+        if (dto.PassScore < 0)
+            return BadRequest(new { error = "Điểm đỗ của quiz không được phép âm." });
+
+        if (dto.MaxAttempts.HasValue && dto.MaxAttempts.Value < 0)
+            return BadRequest(new { error = "Số lần làm bài tối đa không được phép âm." });
+
+        if (dto.DurationMinutes < 0)
+            return BadRequest(new { error = "Thời gian làm bài không được phép âm." });
+
+        var vnNow = DateTime.UtcNow.AddHours(7);
+        if (dto.StartDate.HasValue)
+        {
+            if (dto.StartDate.Value < vnNow.AddMinutes(-5))
+            {
+                return BadRequest(new { error = "Ngày bắt đầu không được ở trong quá khứ." });
+            }
+        }
+
+        if (dto.EndDate.HasValue)
+        {
+            if (dto.EndDate.Value < vnNow.AddMinutes(-5))
+            {
+                return BadRequest(new { error = "Ngày kết thúc không được ở trong quá khứ." });
+            }
+        }
+
+        if (dto.StartDate.HasValue && dto.EndDate.HasValue && dto.EndDate.Value < dto.StartDate.Value)
+        {
+            return BadRequest(new { error = "Ngày kết thúc không được nhỏ hơn ngày bắt đầu." });
+        }
 
         try
         {
@@ -1586,25 +2553,893 @@ public class HRController : Controller
                 using var transaction = await _db.Database.BeginTransactionAsync();
                 try
                 {
-                    var oldLinks = await _db.ExamQuestions.Where(eq => eq.ExamId == examId).ToListAsync();
-                    _db.ExamQuestions.RemoveRange(oldLinks);
+                    int? effectiveCourseId = courseId > 0 ? courseId : null;
+                    
+                    if (await _db.Exams.AnyAsync(e => e.ExamTitle != null && e.ExamTitle.ToLower() == dto.ExamTitle.Trim().ToLower()))
+                    {
+                       return BadRequest(new { error = $"Không thể tạo: Tiêu đề quiz '{dto.ExamTitle.Trim()}' đã tồn tại trong hệ thống. Vui lòng chọn tên khác." });
+                    }
+
+                    var exam = new Exam 
+                    { 
+                        CourseId = effectiveCourseId, 
+                        ExamTitle = dto.ExamTitle.Trim(), 
+                        DurationMinutes = dto.DurationMinutes, 
+                        PassScore = dto.PassScore, 
+                        Level = dto.Level, 
+                        MaxAttempts = dto.MaxAttempts, 
+                        StartDate = dto.StartDate, 
+                        EndDate = dto.EndDate, 
+                        TargetDepartmentId = dto.TargetDepartmentId 
+                    };
+                    
+                    _db.Exams.Add(exam);
                     await _db.SaveChangesAsync();
 
-                    foreach (var qId in questionIds)
+                    if (dto.AiQuestions != null && dto.AiQuestions.Any())
                     {
-                        _db.ExamQuestions.Add(new ExamQuestion
+                        foreach (var qDto in dto.AiQuestions)
                         {
-                            ExamId = examId,
-                            QuestionId = qId,
-                            Points = 10
+                            if (string.IsNullOrWhiteSpace(qDto.QuestionText)) continue;
+
+                            var q = new QuestionBank { 
+                                QuestionText = qDto.QuestionText.Trim(), 
+                                QuestionType = qDto.QuestionType ?? "MultipleChoice",
+                                Difficulty = "Medium" 
+                            };
+                            _db.QuestionBanks.Add(q);
+                            await _db.SaveChangesAsync();
+
+                            if (qDto.Options != null)
+                            {
+                                foreach (var opt in qDto.Options)
+                                {
+                                    if (string.IsNullOrWhiteSpace(opt.OptionText)) continue;
+                                    _db.QuestionOptions.Add(new QuestionOption { 
+                                        QuestionId = q.QuestionId, 
+                                        OptionText = opt.OptionText.Trim(), 
+                                        IsCorrect = opt.IsCorrect 
+                                    });
+                                }
+                            }
+                            
+                            _db.ExamQuestions.Add(new ExamQuestion { 
+                                ExamId = exam.ExamId, 
+                                QuestionId = q.QuestionId, 
+                                Points = qDto.Points 
+                            });
+                        }
+                        await _db.SaveChangesAsync();
+                    }
+
+                    // Send notification to target employees
+                    var targetUserIds = new List<int>();
+                    if (exam.TargetDepartmentId.HasValue && exam.TargetDepartmentId.Value > 0)
+                    {
+                        targetUserIds = await _db.Users
+                            .Where(u => u.DepartmentId == exam.TargetDepartmentId.Value && u.Status == "Active")
+                            .Select(u => u.UserId)
+                            .ToListAsync();
+                    }
+                    else if (exam.CourseId.HasValue && exam.CourseId.Value > 0)
+                    {
+                        targetUserIds = await _db.Enrollments
+                            .Where(e => e.CourseId == exam.CourseId.Value && e.User != null && e.User.Status == "Active")
+                            .Select(e => e.UserId.Value)
+                            .ToListAsync();
+                    }
+                    else
+                    {
+                        int userDeptId = GetCurrentDeptId();
+                        bool isTrainingCenter = IsTrainingCenter();
+                        if (!isTrainingCenter && userDeptId > 0)
+                        {
+                            targetUserIds = await _db.Users
+                                .Where(u => u.DepartmentId == userDeptId && u.Status == "Active")
+                                .Select(u => u.UserId)
+                                .ToListAsync();
+                        }
+                        else
+                        {
+                            targetUserIds = await _db.Users
+                                .Where(u => u.Status == "Active")
+                                .Select(u => u.UserId)
+                                .ToListAsync();
+                        }
+                    }
+
+                    string notifTitle = $"Bạn có lịch thi mới: '{exam.ExamTitle}'" + 
+                                        (exam.StartDate.HasValue ? $" bắt đầu từ {exam.StartDate.Value.ToString("dd/MM/yyyy HH:mm")}" : "") +
+                                        (exam.EndDate.HasValue ? $" đến {exam.EndDate.Value.ToString("dd/MM/yyyy HH:mm")}." : ".");
+                    if (notifTitle.Length > 255) notifTitle = notifTitle.Substring(0, 252) + "...";
+
+                    int nextNotifId = 1;
+                    if (await _db.Notifications.AnyAsync())
+                    {
+                        nextNotifId = await _db.Notifications.MaxAsync(n => n.Id) + 1;
+                    }
+
+                    foreach (var uid in targetUserIds)
+                    {
+                        _db.Notifications.Add(new Notification
+                        {
+                            Id = nextNotifId++,
+                            UserId = uid,
+                            Title = notifTitle,
+                            IsRead = false
                         });
                     }
                     await _db.SaveChangesAsync();
 
                     await transaction.CommitAsync();
-                    return Ok(new { success = true });
+                    return Ok(new { success = true, examId = exam.ExamId });
                 }
                 catch
+                {
+                    await transaction.RollbackAsync();
+                    throw; 
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Đã xảy ra lỗi hệ thống: " + ex.Message });
+        }
+    }
+
+    // ============================================================
+    // API: KHO TÀI LIỆU & BỘ XÂY DỰNG KÉO THẢ ĐỒNG BỘ TỪ IT
+    // ============================================================
+    private async Task EnsureCompatibilitySchemaAsync()
+    {
+        await _db.Database.ExecuteSqlRawAsync(DatabaseCompatibility.SchemaPatchSql);
+    }
+
+    private static int? NormalizeLevel(int? level)
+    {
+        if (!level.HasValue) return null;
+        return level.Value is >= 1 and <= 3 ? level.Value : null;
+    }
+
+    private static int? ParseNullableInt(string? raw)
+    {
+        return int.TryParse(raw, out var value) ? value : null;
+    }
+
+    private sealed class LessonRequestData
+    {
+        public string Title { get; set; } = "";
+        public string? ContentType { get; set; }
+        public string? VideoUrl { get; set; }
+        public bool HasVideoUrlField { get; set; }
+        public string? ContentBody { get; set; }
+        public bool HasContentBodyField { get; set; }
+        public int? Level { get; set; }
+        public int? SortOrder { get; set; }
+        public IFormFile? VideoFile { get; set; }
+        public IFormFile? DocumentFile { get; set; }
+    }
+
+    private async Task<LessonRequestData> ReadLessonRequestAsync()
+    {
+        if (Request.HasFormContentType)
+        {
+            var form = await Request.ReadFormAsync();
+            return new LessonRequestData
+            {
+                Title = form["title"].ToString(),
+                ContentType = form.TryGetValue("contentType", out var contentType) ? contentType.ToString() : null,
+                VideoUrl = form.TryGetValue("videoUrl", out var videoUrl) ? videoUrl.ToString() : null,
+                HasVideoUrlField = form.ContainsKey("videoUrl"),
+                ContentBody = form.TryGetValue("contentBody", out var contentBody) ? contentBody.ToString() : null,
+                HasContentBodyField = form.ContainsKey("contentBody"),
+                Level = ParseNullableInt(form["level"].ToString()),
+                SortOrder = ParseNullableInt(form["sortOrder"].ToString()),
+                VideoFile = form.Files.GetFile("videoFile"),
+                DocumentFile = form.Files.GetFile("documentFile")
+            };
+        }
+
+        var dto = await JsonSerializer.DeserializeAsync<ItCreateLessonDto>(Request.Body, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        }) ?? new ItCreateLessonDto();
+
+        return new LessonRequestData
+        {
+            Title = dto.Title,
+            ContentType = dto.ContentType,
+            VideoUrl = dto.VideoUrl,
+            HasVideoUrlField = dto.VideoUrl != null,
+            ContentBody = dto.ContentBody,
+            HasContentBodyField = dto.ContentBody != null,
+            Level = dto.Level,
+            SortOrder = dto.SortOrder
+        };
+    }
+
+    private async Task<string> SaveLessonUploadAsync(int lessonId, IFormFile file, string subFolder)
+    {
+        var uploadsRoot = Path.Combine(_env.WebRootPath, "uploads", "lessons", lessonId.ToString(), subFolder);
+        Directory.CreateDirectory(uploadsRoot);
+
+        var safeFileName = $"{DateTime.Now:yyyyMMddHHmmss}_{Path.GetFileName(file.FileName)}";
+        var fullPath = Path.Combine(uploadsRoot, safeFileName);
+
+        await using var stream = System.IO.File.Create(fullPath);
+        await file.CopyToAsync(stream);
+        return $"/uploads/lessons/{lessonId}/{subFolder}/{safeFileName}";
+    }
+
+    private void DeleteUploadIfOwned(string? filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !filePath.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var physicalPath = Path.Combine(_env.WebRootPath, filePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+        if (System.IO.File.Exists(physicalPath))
+        {
+            System.IO.File.Delete(physicalPath);
+        }
+    }
+
+    private async Task ApplyLessonAssetsAsync(Lesson lesson, LessonRequestData request, bool isUpdate)
+    {
+        var hasVideoFile = request.VideoFile != null && request.VideoFile.Length > 0;
+        var hasDocumentFile = request.DocumentFile != null && request.DocumentFile.Length > 0;
+        var hasVideoUrl = !string.IsNullOrWhiteSpace(request.VideoUrl);
+        var hasContentBody = !string.IsNullOrWhiteSpace(request.ContentBody);
+
+        // Priority 1: New Video File Upload
+        if (hasVideoFile)
+        {
+            DeleteUploadIfOwned(lesson.VideoUrl);
+            lesson.VideoUrl = await SaveLessonUploadAsync(lesson.LessonId, request.VideoFile!, "video");
+            lesson.ContentType = "Video";
+            lesson.ContentBody = null;
+        }
+        // Priority 2: New Document File Upload
+        else if (hasDocumentFile)
+        {
+            DeleteUploadIfOwned(lesson.VideoUrl);
+            lesson.VideoUrl = await SaveLessonUploadAsync(lesson.LessonId, request.DocumentFile!, "attachments");
+            lesson.ContentType = "Document";
+            lesson.ContentBody = null;
+        }
+        // Priority 3: Explicit clear URL/Video action
+        else if (request.HasVideoUrlField && string.IsNullOrWhiteSpace(request.VideoUrl) && isUpdate)
+        {
+            DeleteUploadIfOwned(lesson.VideoUrl);
+            lesson.VideoUrl = null;
+        }
+        // Priority 4: URL Link (Video or Document)
+        else if (hasVideoUrl)
+        {
+            DeleteUploadIfOwned(lesson.VideoUrl);
+            lesson.VideoUrl = request.VideoUrl!.Trim();
+            lesson.ContentType = request.ContentType ?? "Video";
+            lesson.ContentBody = null;
+        }
+        // Priority 5: AI / Text Body
+        else if (hasContentBody)
+        {
+            DeleteUploadIfOwned(lesson.VideoUrl);
+            lesson.VideoUrl = null;
+            lesson.ContentType = "Text";
+            lesson.ContentBody = request.ContentBody;
+        }
+        // Fallback: If just updating metadata but keeping existing assets
+        else if (isUpdate)
+        {
+             if (!string.IsNullOrWhiteSpace(request.ContentType)) lesson.ContentType = request.ContentType;
+        }
+    }
+
+    private static bool IsVideoRequest(LessonRequestData request)
+    {
+        return string.Equals(request.ContentType, "Video", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsTextRequest(LessonRequestData request)
+    {
+        return string.Equals(request.ContentType, "Text", StringComparison.OrdinalIgnoreCase);
+    }
+
+    [HttpGet("/api/hr/content-library")]
+    public async Task<IActionResult> GetContentLibrary()
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        await EnsureCompatibilitySchemaAsync();
+
+        var courses = await _db.Courses
+            .AsNoTracking()
+            .Where(c => c.Status != "Deleted")
+            .OrderBy(c => c.Title)
+            .Select(c => new
+            {
+                c.CourseId,
+                c.Title,
+                c.CourseCode,
+                c.Level
+            })
+            .ToListAsync();
+
+        var modules = await _db.CourseModules
+            .AsNoTracking()
+            .Include(m => m.Course)
+            .Include(m => m.Lessons)
+            .Where(m => m.Course == null || m.Course.Status != "Deleted")
+            .OrderBy(m => m.Course != null ? m.Course.Title : string.Empty)
+            .ThenBy(m => m.SortOrder)
+            .ThenBy(m => m.Title)
+            .Select(m => new
+            {
+                m.ModuleId,
+                m.Title,
+                m.Level,
+                m.SortOrder,
+                m.CourseId,
+                CourseTitle = m.Course != null ? m.Course.Title : null,
+                CourseCode = m.Course != null ? m.Course.CourseCode : null,
+                LessonsCount = m.Lessons.Count
+            })
+            .ToListAsync();
+
+        var lessons = await _db.Lessons
+            .AsNoTracking()
+            .Include(l => l.Module)
+                .ThenInclude(m => m!.Course)
+            .Include(l => l.LessonAttachments)
+            .Where(l => l.Module == null || l.Module.Course == null || l.Module.Course.Status != "Deleted")
+            .OrderBy(l => l.Module != null && l.Module.Course != null ? l.Module.Course.Title : string.Empty)
+            .ThenBy(l => l.Module != null ? l.Module.Title : string.Empty)
+            .ThenBy(l => l.SortOrder)
+            .ThenBy(l => l.Title)
+            .Select(l => new
+            {
+                l.LessonId,
+                l.Title,
+                l.Level,
+                l.ContentType,
+                l.VideoUrl,
+                l.ContentBody,
+                l.ModuleId,
+                ModuleTitle = l.Module != null ? l.Module.Title : null,
+                CourseId = l.Module != null ? l.Module.CourseId : null,
+                CourseTitle = l.Module != null && l.Module.Course != null ? l.Module.Course.Title : null,
+                CourseCode = l.Module != null && l.Module.Course != null ? l.Module.Course.CourseCode : null,
+                AttachmentsCount = l.LessonAttachments.Count,
+                Attachments = l.LessonAttachments
+                    .OrderBy(a => a.AttachmentId)
+                    .Select(a => new { a.AttachmentId, a.FileName, a.FilePath })
+                    .ToList()
+            })
+            .ToListAsync();
+
+        var exams = await _db.Exams
+            .AsNoTracking()
+            .Include(e => e.Course)
+            .Include(e => e.ExamQuestions)
+            .Where(e => e.Course == null || e.Course.Status != "Deleted")
+            .OrderBy(e => e.Course != null ? e.Course.Title : string.Empty)
+            .ThenBy(e => e.ExamTitle)
+            .Select(e => new
+            {
+                e.ExamId,
+                e.ExamTitle,
+                e.Level,
+                e.DurationMinutes,
+                e.PassScore,
+                e.CourseId,
+                e.MaxAttempts,
+                e.StartDate,
+                e.EndDate,
+                e.TargetDepartmentId,
+                CourseTitle = e.Course != null ? e.Course.Title : null,
+                CourseCode = e.Course != null ? e.Course.CourseCode : null,
+                QuestionsCount = e.ExamQuestions.Count
+            })
+            .ToListAsync();
+
+        return Json(new { courses, modules, lessons, exams });
+    }
+
+    [HttpPut("/api/hr/modules/{moduleId}")]
+    public async Task<IActionResult> UpdateModule(int moduleId, [FromBody] ItCreateModuleDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        await EnsureCompatibilitySchemaAsync();
+
+        var mod = await _db.CourseModules.FindAsync(moduleId);
+        if (mod == null) return NotFound();
+        if (!string.IsNullOrWhiteSpace(dto.Title) &&
+            await _db.CourseModules.AnyAsync(m => m.ModuleId != moduleId && m.CourseId == mod.CourseId && m.Title != null && m.Title.ToLower() == dto.Title.Trim().ToLower()))
+            return BadRequest(new { error = $"Chương {dto.Title.Trim()} đã tồn tại trong khóa học này." });
+        if (!string.IsNullOrWhiteSpace(dto.Title)) mod.Title = dto.Title;
+        if (dto.SortOrder.HasValue) mod.SortOrder = dto.SortOrder.Value;
+        mod.Level = NormalizeLevel(dto.Level);
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true });
+    }
+
+    [HttpDelete("/api/hr/modules/{moduleId}")]
+    public async Task<IActionResult> DeleteModule(int moduleId)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        await EnsureCompatibilitySchemaAsync();
+
+        var mod = await _db.CourseModules
+            .Include(m => m.Lessons)
+            .FirstOrDefaultAsync(m => m.ModuleId == moduleId);
+        if (mod == null) return NotFound();
+
+        foreach (var lesson in mod.Lessons)
+        {
+            lesson.ModuleId = null;
+        }
+
+        _db.CourseModules.Remove(mod);
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("/api/hr/modules/{moduleId}/lessons")]
+    [RequestFormLimits(MultipartBodyLengthLimit = 1024L * 1024L * 1024L)]
+    [RequestSizeLimit(1024L * 1024L * 1024L)]
+    public async Task<IActionResult> CreateLesson(int moduleId)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        await EnsureCompatibilitySchemaAsync();
+        var dto = await ReadLessonRequestAsync();
+
+        if (string.IsNullOrWhiteSpace(dto.Title))
+            return BadRequest(new { error = "Tên bài học là bắt buộc." });
+        if (await _db.Lessons.AnyAsync(l => l.ModuleId == moduleId && l.Title != null && l.Title.ToLower() == dto.Title.Trim().ToLower()))
+            return BadRequest(new { error = $"Bài học '{dto.Title.Trim()}' đã tồn tại trong chương này." });
+
+        if (IsVideoRequest(dto) && (dto.VideoFile == null || dto.VideoFile.Length == 0) && string.IsNullOrWhiteSpace(dto.VideoUrl))
+            return BadRequest(new { error = "Bài video cần chọn file video hoặc nhập link video." });
+        if (IsTextRequest(dto) && string.IsNullOrWhiteSpace(dto.ContentBody))
+            return BadRequest(new { error = "Bài văn bản cần có nội dung." });
+
+        var lesson = new Lesson
+        {
+            ModuleId = moduleId,
+            Title = dto.Title.Trim(),
+            ContentType = string.IsNullOrWhiteSpace(dto.ContentType) ? "Document" : dto.ContentType,
+            VideoUrl = string.IsNullOrWhiteSpace(dto.VideoUrl) ? null : dto.VideoUrl.Trim(),
+            ContentBody = string.IsNullOrWhiteSpace(dto.ContentBody) ? null : dto.ContentBody,
+            SortOrder = dto.SortOrder ?? 0,
+            Level = NormalizeLevel(dto.Level)
+        };
+        _db.Lessons.Add(lesson);
+        await _db.SaveChangesAsync();
+        await ApplyLessonAssetsAsync(lesson, dto, isUpdate: false);
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true, id = lesson.LessonId, videoUrl = lesson.VideoUrl, contentType = lesson.ContentType });
+    }
+
+    [HttpPut("/api/hr/lessons/{lessonId}")]
+    [RequestFormLimits(MultipartBodyLengthLimit = 1024L * 1024L * 1024L)]
+    [RequestSizeLimit(1024L * 1024L * 1024L)]
+    public async Task<IActionResult> UpdateLesson(int lessonId)
+    {
+        try
+        {
+            var auth = RequireManager();
+            if (auth != null) return auth;
+
+            await EnsureCompatibilitySchemaAsync();
+            var dto = await ReadLessonRequestAsync();
+
+            var lesson = await _db.Lessons.FindAsync(lessonId);
+            if (lesson == null) return NotFound();
+            if (!string.IsNullOrWhiteSpace(dto.Title) &&
+                await _db.Lessons.AnyAsync(l => l.LessonId != lessonId && l.ModuleId == lesson.ModuleId && l.Title != null && l.Title.ToLower() == dto.Title.Trim().ToLower()))
+                return BadRequest(new { error = $"Bài học {dto.Title.Trim()} đã tồn tại trong chương này." });
+
+            bool isClearingVideo = dto.HasVideoUrlField && string.IsNullOrWhiteSpace(dto.VideoUrl) && (dto.VideoFile == null || dto.VideoFile.Length == 0);
+
+            if (IsVideoRequest(dto) && !isClearingVideo && string.IsNullOrWhiteSpace(lesson.VideoUrl) && (dto.VideoFile == null || dto.VideoFile.Length == 0) && string.IsNullOrWhiteSpace(dto.VideoUrl))
+                return BadRequest(new { error = "Bài video cần chọn file video hoặc nhập link video." });
+            if (IsTextRequest(dto) && string.IsNullOrWhiteSpace(dto.ContentBody) && string.IsNullOrWhiteSpace(lesson.ContentBody))
+                return BadRequest(new { error = "Bài văn bản cần có nội dung." });
+
+            if (!string.IsNullOrWhiteSpace(dto.Title)) lesson.Title = dto.Title.Trim();
+            if (dto.SortOrder.HasValue) lesson.SortOrder = dto.SortOrder.Value;
+            lesson.Level = NormalizeLevel(dto.Level);
+            await ApplyLessonAssetsAsync(lesson, dto, isUpdate: true);
+            if (!string.IsNullOrWhiteSpace(dto.ContentType) && string.IsNullOrWhiteSpace(lesson.VideoUrl) && string.IsNullOrWhiteSpace(lesson.ContentBody))
+                lesson.ContentType = dto.ContentType;
+            await _db.SaveChangesAsync();
+            return Ok(new { success = true, videoUrl = lesson.VideoUrl, contentType = lesson.ContentType });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi cập nhật bài học: " + ex.Message });
+        }
+    }
+
+    [HttpDelete("/api/hr/lessons/{id}")]
+    public async Task<IActionResult> DeleteLesson(int id)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        await EnsureCompatibilitySchemaAsync();
+
+        try {
+            var lesson = await _db.Lessons
+                .Include(l => l.LessonAttachments)
+                .FirstOrDefaultAsync(l => l.LessonId == id);
+            
+            if (lesson != null)
+            {
+                var logs = await _db.UserLessonLogs.Where(l => l.LessonId == id).ToListAsync();
+                if (logs.Any()) _db.UserLessonLogs.RemoveRange(logs);
+
+                if (lesson.LessonAttachments != null && lesson.LessonAttachments.Any())
+                {
+                    _db.LessonAttachments.RemoveRange(lesson.LessonAttachments);
+                }
+
+                _db.Lessons.Remove(lesson);
+                await _db.SaveChangesAsync();
+            }
+            return Ok(new { success = true });
+        } catch (Exception ex) {
+            return StatusCode(500, new { error = "Lỗi khi xóa dữ liệu liên quan: " + ex.Message });
+        }
+    }
+
+    [HttpPut("/api/hr/exams/{examId}")]
+    public async Task<IActionResult> UpdateExam(int examId, [FromBody] ItCreateExamDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        await EnsureCompatibilitySchemaAsync();
+
+        var exam = await _db.Exams.FindAsync(examId);
+        if (exam == null) return NotFound();
+
+        if (dto.PassScore < 0)
+            return BadRequest(new { error = "Điểm đỗ của quiz không được phép âm." });
+
+        if (dto.MaxAttempts.HasValue && dto.MaxAttempts.Value < 0)
+            return BadRequest(new { error = "Số lần làm bài tối đa không được phép âm." });
+
+        if (dto.DurationMinutes < 0)
+            return BadRequest(new { error = "Thời gian làm bài không được phép âm." });
+
+        var vnNow = DateTime.UtcNow.AddHours(7);
+        if (dto.StartDate.HasValue && (!exam.StartDate.HasValue || Math.Abs((dto.StartDate.Value - exam.StartDate.Value).TotalSeconds) > 1))
+        {
+            if (dto.StartDate.Value < vnNow.AddMinutes(-5))
+            {
+                return BadRequest(new { error = "Ngày bắt đầu không được ở trong quá khứ." });
+            }
+        }
+
+        if (dto.EndDate.HasValue && (!exam.EndDate.HasValue || Math.Abs((dto.EndDate.Value - exam.EndDate.Value).TotalSeconds) > 1))
+        {
+            if (dto.EndDate.Value < vnNow.AddMinutes(-5))
+            {
+                return BadRequest(new { error = "Ngày kết thúc không được ở trong quá khứ." });
+            }
+        }
+
+        if (dto.StartDate.HasValue && dto.EndDate.HasValue && dto.EndDate.Value < dto.StartDate.Value)
+        {
+            return BadRequest(new { error = "Ngày kết thúc không được nhỏ hơn ngày bắt đầu." });
+        }
+        if (!string.IsNullOrWhiteSpace(dto.ExamTitle) &&
+            await _db.Exams.AnyAsync(e => e.ExamId != examId && e.CourseId == exam.CourseId && e.ExamTitle != null && e.ExamTitle.ToLower() == dto.ExamTitle.Trim().ToLower()))
+            return BadRequest(new { error = $"Quiz {dto.ExamTitle.Trim()} đã tồn tại trong khóa học này." });
+
+        if (!string.IsNullOrWhiteSpace(dto.ExamTitle)) exam.ExamTitle = dto.ExamTitle;
+        exam.DurationMinutes = dto.DurationMinutes;
+        exam.PassScore = dto.PassScore;
+        exam.Level = NormalizeLevel(dto.Level);
+        exam.MaxAttempts = dto.MaxAttempts;
+        exam.StartDate = dto.StartDate;
+        exam.EndDate = dto.EndDate;
+        exam.TargetDepartmentId = dto.TargetDepartmentId;
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true });
+    }
+
+    [HttpDelete("/api/hr/exams/{examId}")]
+    public async Task<IActionResult> DeleteExam(int examId)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        await EnsureCompatibilitySchemaAsync();
+
+        var exam = await _db.Exams
+            .Include(e => e.ExamQuestions)
+            .Include(e => e.UserExams)
+            .FirstOrDefaultAsync(e => e.ExamId == examId);
+
+        if (exam == null) return NotFound();
+
+        try
+        {
+            // 1. Clear related Student data first
+            var userExamIds = exam.UserExams.Select(ue => ue.UserExamId).ToList();
+            if (userExamIds.Any())
+            {
+                var answers = await _db.UserAnswers.Where(a => userExamIds.Contains(a.UserExamId)).ToListAsync();
+                _db.UserAnswers.RemoveRange(answers);
+
+                var sessions = await _db.QuizSessionStates.Where(s => userExamIds.Contains(s.UserExamId)).ToListAsync();
+                _db.QuizSessionStates.RemoveRange(sessions);
+            }
+
+            // 2. Clear Exam links and results
+            _db.ExamQuestions.RemoveRange(exam.ExamQuestions);
+            _db.UserExams.RemoveRange(exam.UserExams);
+
+            // 3. Delete the exam object
+            _db.Exams.Remove(exam);
+
+            await _db.SaveChangesAsync();
+            return Ok(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Lỗi khi xóa dữ liệu liên quan: " + ex.Message });
+        }
+    }
+
+    [HttpPost("/api/hr/exams/{examId}/link-to-course/{courseId}")]
+    public async Task<IActionResult> LinkExamToCourse(int examId, int courseId)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var exam = await _db.Exams.FindAsync(examId);
+        if (exam == null) return NotFound("Không tìm thấy bài thi");
+
+        if (exam.CourseId == courseId && courseId > 0)
+        {
+            return Ok(new { success = true, info = "Quiz này đã có sẵn trong khóa học này." });
+        }
+
+        exam.CourseId = courseId > 0 ? courseId : null;
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true, title = exam.ExamTitle });
+    }
+
+    [HttpPost("/api/hr/modules/{moduleId}/link-to-course/{courseId}")]
+    public async Task<IActionResult> LinkModuleToCourse(int moduleId, int courseId)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var mod = await _db.CourseModules.FindAsync(moduleId);
+        if (mod == null) return NotFound("Không tìm thấy chương");
+
+        mod.CourseId = courseId;
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("/api/hr/lessons/{lessonId}/link-to-module/{moduleId}")]
+    public async Task<IActionResult> LinkLessonToModule(int lessonId, int moduleId)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var lesson = await _db.Lessons.FindAsync(lessonId);
+        if (lesson == null) return NotFound("Không tìm thấy bài giảng");
+
+        lesson.ModuleId = moduleId;
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("/api/hr/lessons/{id}/unlink")]
+    [HttpPost("/api/hr/lessons/{id}/unlink-from-module")]
+    public async Task<IActionResult> UnlinkLesson(int id)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var lesson = await _db.Lessons.FindAsync(id);
+        if (lesson == null) return NotFound();
+        lesson.ModuleId = null;
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("/api/hr/modules/{id}/unlink")]
+    [HttpPost("/api/hr/modules/{id}/unlink-from-course/{courseId}")]
+    public async Task<IActionResult> UnlinkModule(int id)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var mod = await _db.CourseModules.FindAsync(id);
+        if (mod == null) return NotFound();
+        mod.CourseId = null;
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("/api/hr/exams/{examId}/unlink-from-course/{courseId}")]
+    public async Task<IActionResult> UnlinkExamFromCourse(int examId, int courseId)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var exam = await _db.Exams.FindAsync(examId);
+        if (exam == null) return NotFound(new { error = "Không tìm thấy bài thi." });
+
+        exam.CourseId = null;
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("/api/hr/lessons/{lessonId}/attachments/upload")]
+    public async Task<IActionResult> UploadLessonAttachment(int lessonId, IFormFile? file)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        await EnsureCompatibilitySchemaAsync();
+
+        if (file == null || file.Length == 0)
+            return BadRequest(new { error = "Bạn chưa chọn file tài liệu." });
+
+        var lesson = await _db.Lessons.FindAsync(lessonId);
+        if (lesson == null) return NotFound(new { error = "Không tìm thấy bài học." });
+
+        var uploadsRoot = Path.Combine(_env.WebRootPath, "uploads", "lessons", lessonId.ToString());
+        Directory.CreateDirectory(uploadsRoot);
+
+        var safeFileName = $"{DateTime.Now:yyyyMMddHHmmss}_{Path.GetFileName(file.FileName)}";
+        var fullPath = Path.Combine(uploadsRoot, safeFileName);
+
+        await using (var stream = System.IO.File.Create(fullPath))
+        {
+            await file.CopyToAsync(stream);
+        }
+
+        var attachment = new LessonAttachment
+        {
+            LessonId = lessonId,
+            FileName = file.FileName,
+            FilePath = $"/uploads/lessons/{lessonId}/{safeFileName}"
+        };
+
+        _db.LessonAttachments.Add(attachment);
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true, attachmentId = attachment.AttachmentId, fileName = attachment.FileName, filePath = attachment.FilePath });
+    }
+
+    [HttpPost("/api/hr/lessons/{lessonId}/attachments/link")]
+    public async Task<IActionResult> CreateLessonAttachmentLink(int lessonId, [FromBody] LessonAttachmentLinkDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        await EnsureCompatibilitySchemaAsync();
+
+        if (string.IsNullOrWhiteSpace(dto.Url))
+            return BadRequest(new { error = "Link tài liệu không được để trống." });
+
+        var lesson = await _db.Lessons.FindAsync(lessonId);
+        if (lesson == null) return NotFound(new { error = "Không tìm thấy bài học." });
+
+        var attachment = new LessonAttachment
+        {
+            LessonId = lessonId,
+            FileName = string.IsNullOrWhiteSpace(dto.FileName) ? dto.Url.Trim() : dto.FileName.Trim(),
+            FilePath = dto.Url.Trim()
+        };
+
+        _db.LessonAttachments.Add(attachment);
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true, attachmentId = attachment.AttachmentId });
+    }
+
+    [HttpDelete("/api/hr/attachments/{id}")]
+    public async Task<IActionResult> DeleteLessonAttachment(int id)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        await EnsureCompatibilitySchemaAsync();
+
+        var attachment = await _db.LessonAttachments.FindAsync(id);
+        if (attachment == null) return NotFound();
+
+        if (!string.IsNullOrWhiteSpace(attachment.FilePath) && attachment.FilePath.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+        {
+            var physicalPath = Path.Combine(_env.WebRootPath, attachment.FilePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+            if (System.IO.File.Exists(physicalPath))
+                System.IO.File.Delete(physicalPath);
+        }
+
+        _db.LessonAttachments.Remove(attachment);
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("/api/hr/exams/{examId}/questions/batch")]
+    public async Task<IActionResult> SaveExamQuestionsBatch(int examId, [FromBody] List<ItCreateQuestionDto>? questions)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        if (questions == null || questions.Count == 0)
+            return BadRequest(new { error = "Danh sách câu hỏi trống." });
+
+        try
+        {
+            var strategy = _db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync<IActionResult>(async () =>
+            {
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    if (!await _db.Exams.AnyAsync(e => e.ExamId == examId))
+                        return NotFound(new { error = "Không tìm thấy bài kiểm tra." });
+
+                    var oldExamQuestions = await _db.ExamQuestions.Where(eq => eq.ExamId == examId).ToListAsync();
+                    if (oldExamQuestions.Count > 0)
+                    {
+                        _db.ExamQuestions.RemoveRange(oldExamQuestions);
+                        await _db.SaveChangesAsync();
+                    }
+
+                    foreach (var dto in questions.Where(q => !string.IsNullOrWhiteSpace(q.QuestionText)))
+                    {
+                        var question = new QuestionBank
+                        {
+                            QuestionText = dto.QuestionText.Trim(),
+                            QuestionType = dto.QuestionType ?? "MultipleChoice",
+                            Difficulty = "Medium"
+                        };
+                        _db.QuestionBanks.Add(question);
+                        await _db.SaveChangesAsync();
+
+                        if (dto.Options != null)
+                        {
+                            foreach (var opt in dto.Options.Where(o => !string.IsNullOrWhiteSpace(o.OptionText)))
+                            {
+                                _db.QuestionOptions.Add(new QuestionOption
+                                {
+                                    QuestionId = question.QuestionId,
+                                    OptionText = opt.OptionText.Trim(),
+                                    IsCorrect = opt.IsCorrect
+                                });
+                            }
+                        }
+
+                        _db.ExamQuestions.Add(new ExamQuestion
+                        {
+                            ExamId = examId,
+                            QuestionId = question.QuestionId,
+                            Points = dto.Points
+                        });
+                        await _db.SaveChangesAsync();
+                    }
+
+                    await transaction.CommitAsync();
+                    return Ok(new { success = true });
+                }
+                catch (Exception)
                 {
                     await transaction.RollbackAsync();
                     throw;
@@ -1613,9 +3448,337 @@ public class HRController : Controller
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = "Lỗi khi lưu cấu trúc bài thi: " + ex.Message });
+            return StatusCode(500, new { error = "Lỗi lưu bộ câu hỏi: " + ex.Message });
         }
     }
+
+    [HttpDelete("/api/hr/exams/{examId}/questions/{questionId}")]
+    public async Task<IActionResult> DeleteExamQuestion(int examId, int questionId)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+
+        var eq = await _db.ExamQuestions.FirstOrDefaultAsync(x => x.ExamId == examId && x.QuestionId == questionId);
+        if (eq != null) {
+            _db.ExamQuestions.Remove(eq);
+            await _db.SaveChangesAsync();
+        }
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("/api/hr/exams/generate")]
+    public async Task<IActionResult> GenerateExam([FromBody] PromptDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+        if (string.IsNullOrWhiteSpace(dto.Prompt)) return BadRequest("Prompt required");
+
+        try
+        {
+            var quizData = await _aiService.GenerateQuizAsync(dto.Prompt);
+            return Ok(quizData);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, ex.Message);
+        }
+    }
+
+    [HttpPost("/api/hr/exams/generate-from-file")]
+    public async Task<IActionResult> GenerateExamFromFile([FromBody] PromptFileDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+        if (string.IsNullOrWhiteSpace(dto.Base64Data)) return BadRequest("File data required");
+
+        try
+        {
+            var quizData = await _aiService.GenerateQuizFromDocumentAsync(dto.Base64Data, dto.MimeType);
+            return Ok(quizData);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, ex.Message);
+        }
+    }
+
+    [HttpPost("/api/hr/exams/generate-from-lesson")]
+    public async Task<IActionResult> GenerateExamFromLesson([FromBody] GenerateFromLessonDto dto)
+    {
+        var auth = RequireManager();
+        if (auth != null) return auth;
+        if (dto.LessonId <= 0) return BadRequest("LessonId required");
+
+        try
+        {
+            var lesson = await _db.Lessons.FindAsync(dto.LessonId);
+            if (lesson == null) return NotFound("Lesson not found");
+
+            var quizData = await _aiService.GenerateQuizFromLessonsAsync(lesson.Title ?? "Bài học", lesson.ContentBody ?? "");
+            return Ok(quizData);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, ex.Message);
+        }
+    }
+
+    // ============================================================
+    // API: APPROVALS (PHÊ DUYỆT TÀI LIỆU) - PHÒNG ĐÀO TẠO
+    // ============================================================
+    [HttpGet("/api/hr/approvals")]
+    public async Task<IActionResult> GetApprovals()
+    {
+        var auth = RequireTrainingCenterManagerApi();
+        if (auth != null) return auth;
+
+        var docs = await (from d in _db.DocumentLibraries
+                          join c in _db.Courses on d.CourseId equals c.CourseId into cj
+                          from c in cj.DefaultIfEmpty()
+                          join m in _db.CourseModules on d.ModuleId equals m.ModuleId into mj
+                          from m in mj.DefaultIfEmpty()
+                          join l in _db.Lessons on d.LessonId equals l.LessonId into lj
+                          from l in lj.DefaultIfEmpty()
+                          join e in _db.Exams on d.ExamId equals e.ExamId into ej
+                          from e in ej.DefaultIfEmpty()
+                          orderby d.Id descending
+                          select new
+                          {
+                              id = d.Id,
+                              title = d.Title,
+                              filePath = d.FilePath,
+                              createdBy = d.CreatedBy,
+                              approvalStatus = d.ApprovalStatus,
+                              rejectionReason = d.RejectionReason,
+                              courseName = c != null ? c.Title : null,
+                              moduleName = m != null ? m.Title : null,
+                              lessonName = l != null ? l.Title : null,
+                              examName = e != null ? e.ExamTitle : null,
+                              newModuleName = d.NewModuleName,
+                              newLessonName = d.NewLessonName,
+                              newExamName = d.NewExamName,
+                              pendingData = d.PendingData,
+                              targetType = d.TargetType
+                          }).ToListAsync();
+
+        return Json(docs);
+    }
+
+    [HttpPost("/api/hr/approvals/{id}/approve")]
+    public async Task<IActionResult> ApproveDocument(int id)
+    {
+        var auth = RequireTrainingCenterManagerApi();
+        if (auth != null) return auth;
+
+        var doc = await _db.DocumentLibraries.FindAsync(id);
+        if (doc == null) return NotFound();
+        if (doc.ApprovalStatus == "Approved") return BadRequest(new { error = "Tài liệu này đã được phê duyệt thành công. Không thể nhấp lại để tránh tạo dữ liệu trùng lặp." });
+
+        // Create new content if requested using PendingData
+        if (!string.IsNullOrWhiteSpace(doc.PendingData))
+        {
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            
+            if (doc.TargetType == "module")
+            {
+                var data = JsonSerializer.Deserialize<HrCreateModuleDto>(doc.PendingData, options);
+                if (data != null)
+                {
+                    var newMod = new CourseModule { 
+                        Title = data.Title, 
+                        CourseId = doc.CourseId,
+                        Level = data.Level,
+                        SortOrder = (_db.CourseModules.Where(m => m.CourseId == doc.CourseId).Max(m => (int?)m.SortOrder) ?? 0) + 1
+                    };
+                    _db.CourseModules.Add(newMod);
+                    await _db.SaveChangesAsync();
+                    doc.ModuleId = newMod.ModuleId;
+                }
+            }
+            else if (doc.TargetType == "lesson")
+            {
+                var data = JsonSerializer.Deserialize<PendingLessonData>(doc.PendingData, options);
+                if (data != null)
+                {
+                    // If creating a new module for this lesson
+                    if (!string.IsNullOrWhiteSpace(data.NewModuleName))
+                    {
+                        var newMod = new CourseModule { 
+                            Title = data.NewModuleName, 
+                            CourseId = doc.CourseId,
+                            SortOrder = (_db.CourseModules.Where(m => m.CourseId == doc.CourseId).Max(m => (int?)m.SortOrder) ?? 0) + 1
+                        };
+                        _db.CourseModules.Add(newMod);
+                        await _db.SaveChangesAsync();
+                        doc.ModuleId = newMod.ModuleId;
+                    }
+                    else if (data.ModuleId.HasValue)
+                    {
+                        doc.ModuleId = data.ModuleId;
+                    }
+
+                    var newLesson = new Lesson { 
+                        Title = data.Title, 
+                        ModuleId = doc.ModuleId,
+                        ContentType = data.ContentType,
+                        ContentBody = data.ContentBody,
+                        VideoUrl = data.VideoUrl,
+                        Level = data.Level,
+                        SortOrder = (_db.Lessons.Where(l => l.ModuleId == doc.ModuleId).Max(l => (int?)l.SortOrder) ?? 0) + 1
+                    };
+                    _db.Lessons.Add(newLesson);
+                    await _db.SaveChangesAsync();
+                    doc.LessonId = newLesson.LessonId;
+
+                    // Link the file as an attachment
+                    var attachment = new LessonAttachment {
+                        LessonId = newLesson.LessonId,
+                        FileName = doc.Title ?? "Attachment",
+                        FilePath = doc.FilePath ?? ""
+                    };
+                    _db.LessonAttachments.Add(attachment);
+                }
+            }
+            else if (doc.TargetType == "quiz")
+            {
+                var data = JsonSerializer.Deserialize<PendingExamData>(doc.PendingData, options);
+                if (data != null)
+                {
+                    var newExam = new Exam { 
+                        ExamTitle = data.ExamTitle, 
+                        CourseId = doc.CourseId,
+                        DurationMinutes = data.DurationMinutes,
+                        PassScore = data.PassScore,
+                        MaxAttempts = data.MaxAttempts,
+                        Level = data.Level
+                    };
+                    _db.Exams.Add(newExam);
+                    await _db.SaveChangesAsync();
+                    doc.ExamId = newExam.ExamId;
+
+                    if (data.Questions != null)
+                    {
+                        foreach (var q in data.Questions)
+                        {
+                            // 1. Create the base question in QuestionBank
+                            var qb = new QuestionBank {
+                                QuestionText = q.QuestionText,
+                                QuestionType = q.QuestionType ?? "MultipleChoice",
+                                Difficulty = data.Level?.ToString() ?? "1"
+                            };
+                            _db.QuestionBanks.Add(qb);
+                            await _db.SaveChangesAsync();
+
+                            // 2. Link QuestionBank to this Exam
+                            var eq = new ExamQuestion {
+                                ExamId = newExam.ExamId,
+                                QuestionId = qb.QuestionId,
+                                Points = 10 // Default points
+                            };
+                            _db.ExamQuestions.Add(eq);
+
+                            // 3. Add Options
+                            if (q.Options != null)
+                            {
+                                foreach (var opt in q.Options)
+                                {
+                                    _db.QuestionOptions.Add(new QuestionOption {
+                                        QuestionId = qb.QuestionId,
+                                        OptionText = opt.OptionText,
+                                        IsCorrect = opt.IsCorrect
+                                    });
+                                }
+                            }
+                        }
+                        await _db.SaveChangesAsync();
+                    }
+                }
+            }
+        }
+        else 
+        {
+            // Fallback to simple name creation if PendingData is missing (for backward compatibility during dev)
+            if (!string.IsNullOrWhiteSpace(doc.NewModuleName))
+            {
+                var newMod = new CourseModule { Title = doc.NewModuleName, CourseId = doc.CourseId };
+                _db.CourseModules.Add(newMod); await _db.SaveChangesAsync(); doc.ModuleId = newMod.ModuleId;
+            }
+            if (!string.IsNullOrWhiteSpace(doc.NewLessonName))
+            {
+                var newLesson = new Lesson { Title = doc.NewLessonName, ModuleId = doc.ModuleId, ContentType = "Document" };
+                _db.Lessons.Add(newLesson); await _db.SaveChangesAsync(); doc.LessonId = newLesson.LessonId;
+                _db.LessonAttachments.Add(new LessonAttachment { LessonId = newLesson.LessonId, FileName = doc.Title ?? "Doc", FilePath = doc.FilePath ?? "" });
+            }
+            if (!string.IsNullOrWhiteSpace(doc.NewExamName))
+            {
+                var newExam = new Exam { ExamTitle = doc.NewExamName, CourseId = doc.CourseId };
+                _db.Exams.Add(newExam); await _db.SaveChangesAsync(); doc.ExamId = newExam.ExamId;
+            }
+        }
+
+        doc.ApprovalStatus = "Approved";
+        doc.ApprovedBy = int.Parse(HttpContext.Session.GetString("UserID") ?? "1");
+        doc.ApprovedAt = DateTime.Now;
+
+        await _db.SaveChangesAsync();
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("/api/hr/approvals/{id}/reject")]
+    public async Task<IActionResult> RejectDocument(int id, [FromBody] RejectDocumentDto dto)
+    {
+        var auth = RequireTrainingCenterManagerApi();
+        if (auth != null) return auth;
+
+        var doc = await _db.DocumentLibraries.FindAsync(id);
+        if (doc == null) return NotFound();
+        if (doc.ApprovalStatus == "Approved") return BadRequest(new { error = "Tài liệu này đã được phê duyệt thành công. Không thể thu hồi bằng nút Hủy." });
+
+        doc.ApprovalStatus = "Rejected";
+        doc.RejectionReason = dto?.Reason;
+        doc.ApprovedBy = int.Parse(HttpContext.Session.GetString("UserID") ?? "1");
+        doc.ApprovedAt = DateTime.Now;
+
+        await _db.SaveChangesAsync();
+
+        // Send notification to proposer
+        try {
+            var proposerId = doc.CreatedBy;
+            if (proposerId.HasValue)
+            {
+                var notifTitle = $"[TỪ CHỐI - ID:{doc.Id}] Đề xuất '{doc.Title}' của bạn không đủ điều kiện.";
+                if (notifTitle.Length > 255)
+                {
+                    notifTitle = notifTitle.Substring(0, 252) + "...";
+                }
+
+                int nextNotifId = 1;
+                if (await _db.Notifications.AnyAsync())
+                {
+                    nextNotifId = await _db.Notifications.MaxAsync(n => n.Id) + 1;
+                }
+
+                var notification = new Notification
+                {
+                    Id = nextNotifId,
+                    UserId = proposerId.Value,
+                    Title = notifTitle,
+                    IsRead = false
+                };
+                _db.Notifications.Add(notification);
+                await _db.SaveChangesAsync();
+            }
+        } catch (Exception) {
+            // Prevent notification errors from blocking response
+        }
+
+        return Ok(new { success = true });
+    }
+}
+
+public class GenerateFromLessonDto
+{
+    public int LessonId { get; set; }
 }
 
 // DTOs
@@ -1726,7 +3889,6 @@ public class HrPublishCourseDto
 
 public class ExtendAssignmentDto
 {
-    public DateTime? DueDate { get; set; }
     public DateTime? NewDueDate { get; set; }
 }
 
@@ -1743,3 +3905,49 @@ public class QuestionPoolOptionDto
     public string OptionText { get; set; } = "";
     public bool IsCorrect { get; set; }
 }
+
+public class ImportCourseFileDto
+{
+    public string Base64Data { get; set; } = "";
+}
+
+// Approval DTOs
+public class RejectDocumentDto
+{
+    public string? Reason { get; set; }
+}
+
+public class PendingLessonData
+{
+    public string Title { get; set; } = "";
+    public int? ModuleId { get; set; }
+    public string? NewModuleName { get; set; }
+    public string ContentType { get; set; } = "Document";
+    public string? ContentBody { get; set; }
+    public string? VideoUrl { get; set; }
+    public int? Level { get; set; }
+}
+
+public class PendingExamData
+{
+    public string ExamTitle { get; set; } = "";
+    public int DurationMinutes { get; set; }
+    public decimal PassScore { get; set; }
+    public int? MaxAttempts { get; set; }
+    public int? Level { get; set; }
+    public List<PendingQuestionData>? Questions { get; set; }
+}
+
+public class PendingQuestionData
+{
+    public string QuestionText { get; set; } = "";
+    public string QuestionType { get; set; } = "MultipleChoice";
+    public List<PendingOptionData>? Options { get; set; }
+}
+
+public class PendingOptionData
+{
+    public string OptionText { get; set; } = "";
+    public bool IsCorrect { get; set; }
+}
+

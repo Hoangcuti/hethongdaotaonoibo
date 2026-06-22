@@ -168,6 +168,20 @@ public class StudentController : Controller
         var course = await _db.Courses.FindAsync(courseId);
         if (course == null) return NotFound();
 
+        var assignment = await _db.TrainingAssignments
+            .FirstOrDefaultAsync(ta => ta.UserId == userId && ta.CourseId == courseId);
+        
+        DateTime? deadline = assignment?.DueDate ?? course.EndDate;
+        if (deadline.HasValue && deadline.Value < DateTime.Now)
+        {
+            var progress = enrollment?.ProgressPercent ?? 0;
+            if (progress < 100)
+            {
+                TempData["ErrorMessage"] = "Khóa học này đã quá hạn hoàn thành và bị khóa. Vui lòng liên hệ Trưởng phòng để được mở lại/gia hạn.";
+                return RedirectToAction("Index", "Student");
+            }
+        }
+
         ViewBag.CourseId = courseId;
         ViewBag.CourseTitle = course.Title;
         // Tự động tính toán lại tiến độ để đảm bảo luôn chính xác khi mở trang
@@ -183,27 +197,97 @@ public class StudentController : Controller
         if (auth != null) return auth;
 
         var userId = GetCurrentUserId();
-        var isEnrolled = await _db.Enrollments.AnyAsync(e => e.UserId == userId && e.CourseId == courseId);
-        if (!isEnrolled) return RedirectToAction("Index", "Student");
-
+        var user = await _db.Users.FindAsync(userId);
+        
         var exam = await _db.Exams
             .Include(e => e.Course)
-            .FirstOrDefaultAsync(e => e.ExamId == examId && e.CourseId == courseId);
+            .FirstOrDefaultAsync(e => e.ExamId == examId);
         if (exam == null) return NotFound();
+
+        // Check permission: either course enrollment, or targeting department, or admin/owner.
+        bool hasAccess = false;
+        int effectiveCourseId = exam.CourseId ?? 0;
+
+        if (exam.CourseId.HasValue && exam.CourseId.Value > 0)
+        {
+            var isEnrolled = await _db.Enrollments.AnyAsync(e => e.UserId == userId && e.CourseId == exam.CourseId.Value);
+            if (isEnrolled)
+            {
+                hasAccess = true;
+                // Check for course expiration and locked
+                var enrollment = await _db.Enrollments.FirstOrDefaultAsync(e => e.UserId == userId && e.CourseId == exam.CourseId.Value);
+                var assignment = await _db.TrainingAssignments
+                    .Where(ta => ta.UserId == userId && ta.CourseId == exam.CourseId.Value)
+                    .OrderByDescending(ta => ta.DueDate ?? DateTime.MaxValue)
+                    .FirstOrDefaultAsync();
+                
+                DateTime? deadline = assignment?.DueDate ?? exam.Course?.EndDate;
+                if (deadline.HasValue && deadline.Value < DateTime.Now)
+                {
+                    var progress = enrollment?.ProgressPercent ?? 0;
+                    if (progress < 100)
+                    {
+                        TempData["ErrorMessage"] = "Khóa học này đã quá hạn hoàn thành và bị khóa. Vui lòng liên hệ Trưởng phòng để được mở lại/gia hạn.";
+                        return RedirectToAction("Index", "Student");
+                    }
+                }
+            }
+        }
+        else if (exam.TargetDepartmentId.HasValue && exam.TargetDepartmentId.Value > 0)
+        {
+            if (user != null && user.DepartmentId == exam.TargetDepartmentId.Value)
+            {
+                hasAccess = true;
+            }
+        }
+        else
+        {
+            // If neither course nor department, it's a global exam.
+            hasAccess = true;
+        }
+
+        if (!hasAccess)
+        {
+            TempData["ErrorMessage"] = "Bạn không có quyền thực hiện bài kiểm tra này.";
+            return RedirectToAction("Index", "Student");
+        }
+
+        // Check date/time availability
+        var vnNow = DateTime.UtcNow.AddHours(7);
+        if (exam.StartDate.HasValue && vnNow < exam.StartDate.Value)
+        {
+            TempData["ErrorMessage"] = $"Bài thi chưa đến thời gian mở (Sẽ mở vào lúc {exam.StartDate.Value.ToString("dd/MM/yyyy HH:mm")}).";
+            if (effectiveCourseId > 0)
+                return RedirectToAction("Learn", "Student", new { courseId = effectiveCourseId });
+            else
+                return RedirectToAction("Index", "Student");
+        }
+
+        if (exam.EndDate.HasValue && vnNow > exam.EndDate.Value)
+        {
+            TempData["ErrorMessage"] = "Bài thi đã hết hạn và đóng lại.";
+            if (effectiveCourseId > 0)
+                return RedirectToAction("Learn", "Student", new { courseId = effectiveCourseId });
+            else
+                return RedirectToAction("Index", "Student");
+        }
 
         // Check attempts limit
         var attemptsCount = await _db.UserExams.CountAsync(ue => ue.UserId == userId && ue.ExamId == examId && ue.IsFinish == true);
         var activeSession = await _db.UserExams.AnyAsync(ue => ue.UserId == userId && ue.ExamId == examId && ue.IsFinish != true);
         if (exam.MaxAttempts.HasValue && attemptsCount >= exam.MaxAttempts.Value && !activeSession)
         {
-            return RedirectToAction("Learn", "Student", new { courseId });
+            if (effectiveCourseId > 0)
+                return RedirectToAction("Learn", "Student", new { courseId = effectiveCourseId });
+            else
+                return RedirectToAction("Index", "Student");
         }
 
         // Check sequential chapter locks
-        if (exam.ModuleId.HasValue)
+        if (exam.ModuleId.HasValue && effectiveCourseId > 0)
         {
             var modulesList = await _db.CourseModules
-                .Where(m => m.CourseId == courseId)
+                .Where(m => m.CourseId == effectiveCourseId)
                 .OrderBy(m => m.SortOrder)
                 .ToListAsync();
             
@@ -211,7 +295,7 @@ public class StudentController : Controller
             if (currentMod != null)
             {
                 var courseExams = await _db.Exams
-                    .Where(e => e.CourseId == courseId)
+                    .Where(e => e.CourseId == effectiveCourseId)
                     .ToListAsync();
 
                 var courseExamIds = courseExams.Select(ce => ce.ExamId).ToList();
@@ -245,13 +329,13 @@ public class StudentController : Controller
 
                 if (isLocked)
                 {
-                    return RedirectToAction("Learn", "Student", new { courseId });
+                    return RedirectToAction("Learn", "Student", new { courseId = effectiveCourseId });
                 }
             }
         }
 
-        ViewBag.CourseId = courseId;
-        ViewBag.CourseTitle = exam.Course?.Title;
+        ViewBag.CourseId = effectiveCourseId;
+        ViewBag.CourseTitle = exam.Course?.Title ?? "Bài kiểm tra phòng ban";
         ViewBag.ExamId = examId;
         ViewBag.ExamTitle = exam.ExamTitle;
 
@@ -501,8 +585,30 @@ public class StudentController : Controller
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var lesson = await _db.Lessons.Include(l => l.Module).FirstOrDefaultAsync(l => l.LessonId == lessonId);
+        var lesson = await _db.Lessons
+            .Include(l => l.Module)
+                .ThenInclude(m => m!.Course)
+            .FirstOrDefaultAsync(l => l.LessonId == lessonId);
         if (lesson?.Module?.CourseId == null) return NotFound();
+
+        var courseId = lesson.Module.CourseId.Value;
+        var enrollment = await _db.Enrollments.FirstOrDefaultAsync(e => e.UserId == userId && e.CourseId == courseId);
+        if (enrollment == null) return Forbid();
+
+        var assignment = await _db.TrainingAssignments
+            .Where(ta => ta.UserId == userId && ta.CourseId == courseId)
+            .OrderByDescending(ta => ta.DueDate ?? DateTime.MaxValue)
+            .FirstOrDefaultAsync();
+
+        DateTime? deadline = assignment?.DueDate ?? lesson.Module.Course?.EndDate;
+        if (deadline.HasValue && deadline.Value < DateTime.Now)
+        {
+            var progress = enrollment.ProgressPercent ?? 0;
+            if (progress < 100)
+            {
+                return BadRequest(new { error = "Khóa học này đã quá hạn hoàn thành và bị khóa. Vui lòng liên hệ Trưởng phòng để được mở lại/gia hạn." });
+            }
+        }
 
         var log = await _db.UserLessonLogs.FirstOrDefaultAsync(l => l.LessonId == lessonId && l.UserId == userId);
         if (log == null)
@@ -562,10 +668,48 @@ public class StudentController : Controller
                 .FirstOrDefaultAsync(e => e.ExamId == examId);
             
             if (exam == null) return NotFound(new { error = "Khong tim thay bai thi." });
-            if (exam.CourseId == null) return BadRequest(new { error = "Bai thi khong thuoc khoa hoc nao." });
+            // Check permission: either course enrollment, targeting department, or global.
+            bool hasAccess = false;
+            if (exam.CourseId.HasValue && exam.CourseId.Value > 0)
+            {
+                var enrollment = await _db.Enrollments.FirstOrDefaultAsync(e => e.UserId == userId && e.CourseId == exam.CourseId.Value);
+                if (enrollment != null)
+                {
+                    hasAccess = true;
+                    // Check for course expiration and locked
+                    var assignment = await _db.TrainingAssignments
+                        .Where(ta => ta.UserId == userId && ta.CourseId == exam.CourseId.Value)
+                        .OrderByDescending(ta => ta.DueDate ?? DateTime.MaxValue)
+                        .FirstOrDefaultAsync();
+                    
+                    DateTime? deadline = assignment?.DueDate ?? exam.Course?.EndDate;
+                    if (deadline.HasValue && deadline.Value < DateTime.Now)
+                    {
+                        var progress = enrollment.ProgressPercent ?? 0;
+                        if (progress < 100)
+                        {
+                            return BadRequest(new { error = "Khóa học này đã quá hạn hoàn thành và bị khóa. Vui lòng liên hệ Trưởng phòng để được mở lại/gia hạn." });
+                        }
+                    }
+                }
+            }
+            else if (exam.TargetDepartmentId.HasValue && exam.TargetDepartmentId.Value > 0)
+            {
+                var user = await _db.Users.FindAsync(userId.Value);
+                if (user != null && user.DepartmentId == exam.TargetDepartmentId.Value)
+                {
+                    hasAccess = true;
+                }
+            }
+            else if (!exam.CourseId.HasValue && !exam.TargetDepartmentId.HasValue)
+            {
+                hasAccess = true;
+            }
 
-            var isEnrolled = await _db.Enrollments.AnyAsync(e => e.UserId == userId && e.CourseId == exam.CourseId);
-            if (!isEnrolled) return Forbid();
+            if (!hasAccess)
+            {
+                return Forbid();
+            }
 
             // Check max attempts
             var attemptsCount = await _db.UserExams.CountAsync(ue => ue.UserId == userId && ue.ExamId == examId && ue.IsFinish == true);
@@ -576,7 +720,7 @@ public class StudentController : Controller
             }
 
             // Check if the exam's module is locked
-            if (exam.ModuleId.HasValue)
+            if (exam.ModuleId.HasValue && exam.CourseId.HasValue)
             {
                 var courseId = exam.CourseId.Value;
                 var modulesList = await _db.CourseModules
@@ -1329,6 +1473,9 @@ public class StudentController : Controller
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
+        var user = await _db.Users.FindAsync(userId.Value);
+        int? userDeptId = user?.DepartmentId;
+
         var enrolledCourseIds = await _db.Enrollments
             .Where(e => e.UserId == userId.Value && e.Status != "Completed")
             .Select(e => e.CourseId)
@@ -1336,12 +1483,20 @@ public class StudentController : Controller
 
         var exams = await _db.Exams
             .Include(e => e.Course)
-            .Where(e => enrolledCourseIds.Contains(e.CourseId) && e.EndDate > DateTime.Now)
+            .Where(e => 
+                (
+                    (e.CourseId.HasValue && enrolledCourseIds.Contains(e.CourseId)) || 
+                    (e.TargetDepartmentId.HasValue && e.TargetDepartmentId.Value == userDeptId) ||
+                    (!e.CourseId.HasValue && !e.TargetDepartmentId.HasValue)
+                ) 
+                && (e.EndDate == null || e.EndDate > DateTime.UtcNow.AddHours(7))
+            )
             .Select(e => new
             {
                 examId = e.ExamId,
                 title = e.ExamTitle,
-                courseTitle = e.Course != null ? e.Course.Title : "N/A",
+                courseTitle = e.Course != null ? e.Course.Title : "Kiểm tra phòng ban",
+                courseId = e.CourseId ?? 0,
                 startTime = e.StartDate,
                 endTime = e.EndDate,
                 passScore = e.PassScore,
@@ -1754,8 +1909,14 @@ public class StudentController : Controller
                 }
 
                 // 3. Gửi thông báo (Sử dụng các trường hiện có trong DB của bạn)
+                int nextNotifId = 1;
+                if (await _db.Notifications.AnyAsync())
+                {
+                    nextNotifId = await _db.Notifications.MaxAsync(n => n.Id) + 1;
+                }
                 _db.Notifications.Add(new Notification
                 {
+                    Id = nextNotifId,
                     UserId = userId,
                     Title = $"Chúc mừng! Bạn đã hoàn thành khóa học và được cấp chứng chỉ mới.",
                     IsRead = false
@@ -1819,8 +1980,15 @@ public class StudentController : Controller
             notifTitle = notifTitle.Substring(0, 252) + "...";
         }
 
+        int nextId = 1;
+        if (await _db.Notifications.AnyAsync())
+        {
+            nextId = await _db.Notifications.MaxAsync(n => n.Id) + 1;
+        }
+
         var notification = new Notification
         {
+            Id = nextId,
             UserId = managerId.Value,
             Title = notifTitle,
             IsRead = false

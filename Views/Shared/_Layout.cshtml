@@ -72,6 +72,10 @@
                             <li class="nav-item"><a class="nav-link" onclick="navigate('assignments')"><span class="nav-icon">↗</span><span class="nav-text">Phan cong</span></a></li>
                             <li class="nav-item"><a class="nav-link" onclick="navigate('staff-progress')"><span class="nav-icon">◔</span><span class="nav-text">Tien do</span></a></li>
                             <li class="nav-item"><a class="nav-link" onclick="navigate('hr-notifications')"><span class="nav-icon">&#128276;</span><span class="nav-text">Thong bao</span></a></li>
+                            @if (deptName == "Trung tâm Đào tạo Nội bộ")
+                            {
+                                <li class="nav-item"><a class="nav-link" onclick="navigate('approvals')"><span class="nav-icon">✓</span><span class="nav-text">Phe duyet</span></a></li>
+                            }
                         }
                         <li class="nav-item"><a class="nav-link" onclick="navigate('documents')"><span class="nav-icon">≣</span><span class="nav-text">Tai lieu</span></a></li>
                     </ul>

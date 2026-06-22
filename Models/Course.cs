@@ -50,11 +50,9 @@ public partial class Course
     [Column(TypeName = "datetime")]
     public DateTime? CreatedAt { get; set; }
 
-    [NotMapped]
     [Column(TypeName = "datetime")]
     public DateTime? StartDate { get; set; }
 
-    [NotMapped]
     [Column(TypeName = "datetime")]
     public DateTime? EndDate { get; set; }
 

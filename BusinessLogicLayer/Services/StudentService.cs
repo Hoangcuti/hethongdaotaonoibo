@@ -53,6 +53,7 @@ public class StudentService : IStudentService
     {
         var enrollments = await _enrollmentRepository.Query()
             .Include(e => e.Course)
+                .ThenInclude(c => c.TrainingAssignments.Where(ta => ta.UserId == userId))
             .Where(e => e.UserId == userId)
             .ToListAsync();
 
@@ -69,7 +70,11 @@ public class StudentService : IStudentService
                 title = e.Course?.Title ?? "N/A",
                 enrollDate = e.EnrollDate,
                 progress = e.ProgressPercent ?? 0,
-                status = e.Status
+                status = e.Status,
+                dueDate = e.Course?.TrainingAssignments
+                    .Where(ta => ta.UserId == userId)
+                    .Select(ta => ta.DueDate)
+                    .FirstOrDefault() ?? e.Course?.EndDate
             })
             .ToList();
 
@@ -116,6 +121,9 @@ public class StudentService : IStudentService
             progress = c.Enrollments.Where(e => e.UserId == userId)
                 .Select(e => e.ProgressPercent)
                 .FirstOrDefault() ?? 0,
+            dueDate = c.TrainingAssignments.Where(ta => ta.UserId == userId)
+                .Select(ta => ta.DueDate)
+                .FirstOrDefault() ?? c.EndDate,
             quizCount = c.Exams.Count
         }).ToListAsync();
 
@@ -203,6 +211,14 @@ public class StudentService : IStudentService
             isMandatory = course.IsMandatory,
             thumbnail = course.Thumbnail,
             enrolled = isEnrolled,
+            progress = course.Enrollments
+                .Where(e => e.UserId == userId)
+                .Select(e => e.ProgressPercent)
+                .FirstOrDefault() ?? 0,
+            dueDate = course.TrainingAssignments
+                .Where(ta => ta.UserId == userId)
+                .Select(ta => ta.DueDate)
+                .FirstOrDefault() ?? course.EndDate,
             totalModules = course.CourseModules.Count,
             totalLessons = course.CourseModules.SelectMany(m => m.Lessons).Count(),
             totalQuizzes = course.Exams.Count
@@ -222,6 +238,11 @@ public class StudentService : IStudentService
             .FirstOrDefaultAsync(c => c.CourseId == courseId);
         
         if (course == null) return false;
+
+        if (course.EndDate.HasValue && course.EndDate.Value.Date < DateTime.Today)
+        {
+            return false;
+        }
 
         var enrollment = new Enrollment
         {

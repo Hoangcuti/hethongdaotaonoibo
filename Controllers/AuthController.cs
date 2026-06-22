@@ -97,7 +97,7 @@ public class AuthController : Controller
         string? targetUsername = normalized switch
         {
             "it" => "admin",
-            "hr" => "tuyettthr0001",
+            "hr" => "lanhhgv0001",
             "manager" => "maypvkt0001",
             "employee" => "cuongnvcn0001",
             _ => null
